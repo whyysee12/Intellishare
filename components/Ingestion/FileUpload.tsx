@@ -1,12 +1,17 @@
 import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { UploadCloud, X, FileText, Image, Film, Music, CheckCircle, AlertCircle, Loader, Tag, File } from 'lucide-react';
+import { MOCK_CASES } from '../../data/mockData';
+import { Case } from '../../types';
 
 const FileUpload = () => {
+  const navigate = useNavigate();
   const [dragActive, setDragActive] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [completed, setCompleted] = useState(false);
+  const [createdCaseId, setCreatedCaseId] = useState<string | null>(null);
   
   // Metadata state
   const [caseId, setCaseId] = useState('');
@@ -66,9 +71,38 @@ const FileUpload = () => {
           clearInterval(interval);
           setUploading(false);
           setCompleted(true);
+          
+          // --- CREATE MOCK CASE AND INJECT INTO SYSTEM ---
+          const newId = caseId.trim() || `FIR-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000) + 1000}`;
+          
+          const newCase: Case = {
+            id: newId,
+            title: `${category} Investigation - Digital Upload`,
+            description: `Case automatically generated via Data Ingestion Module. Contains ${files.length} secure evidence files (${files.map(f => f.name).join(', ')}). Security Classification: ${classification}.`,
+            type: category === 'General Investigation' ? 'Cybercrime' : category === 'Financial Record' ? 'Fraud' : 'Surveillance',
+            status: 'Registered',
+            date: new Date().toISOString().split('T')[0],
+            location: {
+                lat: 28.6139 + (Math.random() * 0.1 - 0.05),
+                lng: 77.2090 + (Math.random() * 0.1 - 0.05),
+                city: 'New Delhi',
+                address: 'Digital Evidence Locker'
+            },
+            priority: classification === 'Top Secret' || classification === 'Secret' ? 'High' : 'Medium',
+            assignedOfficer: 'Current User', 
+            entities: [
+                { id: 'e-1', type: 'Location', value: 'Upload Origin' }
+            ],
+            similarityScore: 0
+          };
+
+          // Add to the global mock array so it appears in Case List
+          MOCK_CASES.unshift(newCase);
+          setCreatedCaseId(newId);
+
           return 100;
         }
-        return prev + 5; // Simulate speed
+        return prev + 10;
       });
     }, 200);
   };
@@ -78,6 +112,7 @@ const FileUpload = () => {
     setCompleted(false);
     setProgress(0);
     setCaseId('');
+    setCreatedCaseId(null);
   };
 
   if (completed) {
@@ -89,7 +124,7 @@ const FileUpload = () => {
         <h3 className="text-2xl font-bold text-navy-900 mb-2">Ingestion Successful</h3>
         <p className="text-slate-500 max-w-md mb-8">
           {files.length} files have been securely uploaded, scanned for malware, and indexed. 
-          Entity extraction is currently processing in the background.
+          Case <span className="font-mono font-bold text-navy-700">{createdCaseId}</span> has been created.
         </p>
         <div className="flex gap-4">
           <button 
@@ -98,7 +133,10 @@ const FileUpload = () => {
           >
             Upload More
           </button>
-          <button className="px-6 py-2 bg-navy-800 text-white rounded-md font-medium hover:bg-navy-700 transition">
+          <button 
+            onClick={() => navigate(`/cases/${createdCaseId}`)}
+            className="px-6 py-2 bg-navy-800 text-white rounded-md font-medium hover:bg-navy-700 transition shadow-lg"
+          >
             View Case Details
           </button>
         </div>

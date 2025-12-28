@@ -52,6 +52,7 @@ const App = () => {
             <Route path="/criminals" element={<ProtectedRoute><CriminalRegistry /></ProtectedRoute>} />
             <Route path="/ingest" element={<ProtectedRoute><DataIngestion /></ProtectedRoute>} />
             <Route path="/analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
+            <Route path="/analytics/:id" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
             <Route path="/search" element={<ProtectedRoute><SearchModule /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
             <Route path="/share" element={<ProtectedRoute><InterAgencyShare /></ProtectedRoute>} />

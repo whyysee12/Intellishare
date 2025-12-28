@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { GoogleGenAI } from "@google/genai";
 import * as L from 'leaflet';
 import { MOCK_CASES, AGENCIES, DEMO_USERS } from '../../data/mockData';
@@ -37,6 +37,7 @@ import {
   Layers
 } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Case } from '../../types';
 
 // Fix for default marker icon in leaflet with webpack/react
 const iconUrl = 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png';
@@ -53,6 +54,7 @@ L.Marker.prototype.options.icon = DefaultIcon;
 const CaseDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { preferences } = useTheme();
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -97,7 +99,43 @@ Surveillance team Alpha deployed to monitor movements. Inter-agency request sent
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
 
-  const caseData = MOCK_CASES.find(c => c.id === id);
+  // --- Dynamic Case Handling ---
+  const [caseData, setCaseData] = useState<Case | undefined>(undefined);
+
+  useEffect(() => {
+    // 1. Try to find existing case
+    const existing = MOCK_CASES.find(c => c.id === id);
+    if (existing) {
+      setCaseData(existing);
+    } else if (location.state && location.state.generateNew && id) {
+      // 2. Generate a "Shadow Record" if passed via state
+      const { entityName, entityType } = location.state;
+      
+      const newCase: Case = {
+        id: id,
+        title: `Investigation regarding ${entityName}`,
+        description: `Auto-generated case file initiated due to suspicious activity linked to ${entityName}. This is a provisional shadow record created for immediate intelligence tracking.`,
+        type: entityType === 'Vehicle' ? 'Traffic Violation' : 'Surveillance',
+        status: 'Under Investigation',
+        date: new Date().toISOString().split('T')[0],
+        location: {
+           lat: 26.9124, 
+           lng: 75.7873,
+           city: 'Jaipur',
+           address: 'Sector 4, Malviya Nagar'
+        },
+        priority: 'Medium',
+        assignedOfficer: 'Officer Rajesh Kumar',
+        entities: [
+          { id: 'e-gen-1', type: entityType || 'Person', value: entityName },
+          { id: 'e-gen-2', type: 'Location', value: 'Jaipur Safehouse' }
+        ],
+        similarityScore: 0
+      };
+      setCaseData(newCase);
+    }
+  }, [id, location.state]);
+
 
   // Simulation of real-time collaboration
   useEffect(() => {

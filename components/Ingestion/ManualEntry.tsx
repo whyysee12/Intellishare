@@ -1,17 +1,68 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Save, Send, Plus, Trash2, MapPin, Calendar, User, FileText, AlertTriangle } from 'lucide-react';
+import { MOCK_CASES } from '../../data/mockData';
+import { Case } from '../../types';
 
 const ManualEntry = () => {
+  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState(0);
   const [suspects, setSuspects] = useState([{ name: '', age: '', details: '' }]);
+  
+  // Form State
+  const [form, setForm] = useState({
+    caseId: '',
+    category: 'Theft / Burglary',
+    priority: 'Medium',
+    officer: 'Officer Rajesh Kumar',
+    date: new Date().toISOString().split('T')[0],
+    time: '',
+    location: '',
+    description: ''
+  });
+
+  const updateForm = (key: string, value: string) => {
+    setForm(prev => ({ ...prev, [key]: value }));
+  };
   
   const addSuspect = () => setSuspects([...suspects, { name: '', age: '', details: '' }]);
   const removeSuspect = (index: number) => setSuspects(suspects.filter((_, i) => i !== index));
   
-  // Basic form handlers (simplified for demo)
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    alert("Case filed successfully! Reference ID: FIR-" + Math.floor(Math.random() * 10000));
+    
+    // Generate ID if missing
+    const finalId = form.caseId || `FIR-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000) + 1000}`;
+    
+    const newCase: Case = {
+      id: finalId,
+      title: `${form.category} Case - ${form.location || 'Unknown Location'}`,
+      description: form.description || `Incident reported on ${form.date}. Investigation started.`,
+      type: form.category.split('/')[0].trim(),
+      status: 'Registered',
+      date: form.date,
+      location: {
+        lat: 28.6139,
+        lng: 77.2090,
+        city: form.location.split(',')[0] || 'New Delhi',
+        address: form.location
+      },
+      priority: form.priority as 'High' | 'Medium' | 'Low',
+      assignedOfficer: form.officer,
+      entities: suspects.filter(s => s.name).map((s, i) => ({
+        id: `s-${i}`,
+        type: 'Person',
+        value: s.name,
+        details: `${s.age} years old. ${s.details}`
+      })),
+      similarityScore: 0
+    };
+
+    // Inject into system
+    MOCK_CASES.unshift(newCase);
+    
+    // Navigate
+    navigate(`/cases/${finalId}`);
   };
 
   const sections = ['Case Details', 'Incident Info', 'Involved Parties'];
@@ -59,22 +110,36 @@ const ManualEntry = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">FIR / Case Number <span className="text-red-500">*</span></label>
-                  <input type="text" placeholder="e.g. 2024/02/1044" className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900" />
+                  <input 
+                    type="text" 
+                    value={form.caseId}
+                    onChange={(e) => updateForm('caseId', e.target.value)}
+                    placeholder="e.g. FIR-2024-1044" 
+                    className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900" 
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">Crime Category <span className="text-red-500">*</span></label>
-                  <select className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900">
-                    <option>Select Category...</option>
+                  <select 
+                    value={form.category}
+                    onChange={(e) => updateForm('category', e.target.value)}
+                    className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900"
+                  >
                     <option>Theft / Burglary</option>
                     <option>Cybercrime</option>
                     <option>Assault</option>
                     <option>Fraud</option>
                     <option>Narcotics</option>
+                    <option>Homicide</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">Priority Level</label>
-                  <select className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900">
+                  <select 
+                    value={form.priority}
+                    onChange={(e) => updateForm('priority', e.target.value)}
+                    className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900"
+                  >
                     <option>Medium</option>
                     <option>High</option>
                     <option>Critical</option>
@@ -83,7 +148,12 @@ const ManualEntry = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">Investigating Officer</label>
-                  <input type="text" defaultValue="Officer Rajesh Kumar" className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900" />
+                  <input 
+                    type="text" 
+                    value={form.officer}
+                    onChange={(e) => updateForm('officer', e.target.value)}
+                    className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900" 
+                  />
                 </div>
               </div>
             </div>
@@ -101,23 +171,45 @@ const ManualEntry = () => {
                     <label className="block text-sm font-bold text-slate-700 mb-1">Date of Incident</label>
                     <div className="relative">
                       <Calendar size={18} className="absolute left-3 top-2.5 text-slate-400" />
-                      <input type="date" className="w-full border border-slate-300 rounded-md pl-10 pr-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900" />
+                      <input 
+                        type="date" 
+                        value={form.date}
+                        onChange={(e) => updateForm('date', e.target.value)}
+                        className="w-full border border-slate-300 rounded-md pl-10 pr-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900" 
+                      />
                     </div>
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-1">Time (Approx)</label>
-                    <input type="time" className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900" />
+                    <input 
+                      type="time" 
+                      value={form.time}
+                      onChange={(e) => updateForm('time', e.target.value)}
+                      className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900" 
+                    />
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-sm font-bold text-slate-700 mb-1">Location / Address</label>
-                    <input type="text" placeholder="House No, Street, Landmark, City" className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none mb-2 bg-white text-slate-900" />
+                    <input 
+                      type="text" 
+                      value={form.location}
+                      onChange={(e) => updateForm('location', e.target.value)}
+                      placeholder="House No, Street, Landmark, City" 
+                      className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none mb-2 bg-white text-slate-900" 
+                    />
                     <div className="h-40 bg-slate-100 rounded border border-slate-300 flex items-center justify-center text-slate-400 text-sm">
                       <MapPin size={20} className="mr-2" /> Map Selection Widget Placeholder
                     </div>
                   </div>
                   <div className="md:col-span-2">
                      <label className="block text-sm font-bold text-slate-700 mb-1">Incident Description</label>
-                     <textarea rows={5} className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900" placeholder="Detailed account of the incident..."></textarea>
+                     <textarea 
+                       rows={5} 
+                       value={form.description}
+                       onChange={(e) => updateForm('description', e.target.value)}
+                       className="w-full border border-slate-300 rounded-md px-3 py-2.5 text-sm focus:ring-2 focus:ring-navy-500 outline-none bg-white text-slate-900" 
+                       placeholder="Detailed account of the incident..."
+                     ></textarea>
                   </div>
                 </div>
              </div>
@@ -135,9 +227,39 @@ const ManualEntry = () => {
                 {suspects.map((suspect, index) => (
                   <div key={index} className="flex gap-4 items-start bg-slate-50 p-4 rounded-lg border border-slate-200 relative group">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
-                      <input type="text" placeholder="Name / Alias" className="border border-slate-300 rounded px-3 py-2 text-sm bg-white text-slate-900 focus:ring-2 focus:ring-navy-500 outline-none" />
-                      <input type="text" placeholder="Age / Appearance" className="border border-slate-300 rounded px-3 py-2 text-sm bg-white text-slate-900 focus:ring-2 focus:ring-navy-500 outline-none" />
-                      <input type="text" placeholder="Contact / Address" className="border border-slate-300 rounded px-3 py-2 text-sm bg-white text-slate-900 focus:ring-2 focus:ring-navy-500 outline-none" />
+                      <input 
+                        type="text" 
+                        placeholder="Name / Alias" 
+                        value={suspect.name}
+                        onChange={(e) => {
+                          const newSuspects = [...suspects];
+                          newSuspects[index].name = e.target.value;
+                          setSuspects(newSuspects);
+                        }}
+                        className="border border-slate-300 rounded px-3 py-2 text-sm bg-white text-slate-900 focus:ring-2 focus:ring-navy-500 outline-none" 
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="Age / Appearance" 
+                        value={suspect.age}
+                        onChange={(e) => {
+                          const newSuspects = [...suspects];
+                          newSuspects[index].age = e.target.value;
+                          setSuspects(newSuspects);
+                        }}
+                        className="border border-slate-300 rounded px-3 py-2 text-sm bg-white text-slate-900 focus:ring-2 focus:ring-navy-500 outline-none" 
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="Contact / Address" 
+                        value={suspect.details}
+                        onChange={(e) => {
+                          const newSuspects = [...suspects];
+                          newSuspects[index].details = e.target.value;
+                          setSuspects(newSuspects);
+                        }}
+                        className="border border-slate-300 rounded px-3 py-2 text-sm bg-white text-slate-900 focus:ring-2 focus:ring-navy-500 outline-none" 
+                      />
                     </div>
                     {suspects.length > 1 && (
                       <button type="button" onClick={() => removeSuspect(index)} className="text-slate-400 hover:text-red-500 pt-2">

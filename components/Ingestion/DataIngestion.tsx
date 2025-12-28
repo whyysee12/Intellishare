@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { UploadCloud, FileText, Globe, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import FileUpload from './FileUpload';
 import ManualEntry from './ManualEntry';
@@ -6,7 +7,14 @@ import APIIntegration from './APIIntegration';
 import ScheduledImports from './ScheduledImports';
 
 const DataIngestion = () => {
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('upload');
+
+  useEffect(() => {
+    if (location.state && location.state.tab) {
+      setActiveTab(location.state.tab);
+    }
+  }, [location.state]);
 
   return (
     <div className="space-y-6">

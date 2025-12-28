@@ -1,15 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MOCK_CASES } from '../../data/mockData';
-import { Eye, Edit, Share2, Filter, Download, Briefcase } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Eye, Edit, Share2, Filter, Download, Briefcase, BarChart3, Trash2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 
 const CaseList = () => {
+  const [cases, setCases] = useState(MOCK_CASES);
   const [filter, setFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const { preferences } = useTheme();
+  const navigate = useNavigate();
 
-  const filteredCases = MOCK_CASES.filter(c => {
+  // Ensure we display the latest data when component mounts (in case of additions via other tabs)
+  useEffect(() => {
+    setCases([...MOCK_CASES]);
+  }, []);
+
+  const handleDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm(`Are you sure you want to permanently delete Case ${id}?`)) {
+      // Mutate global mock data to persist deletion across navigation
+      const index = MOCK_CASES.findIndex(c => c.id === id);
+      if (index > -1) {
+        MOCK_CASES.splice(index, 1);
+      }
+      // Update local state
+      setCases(prev => prev.filter(c => c.id !== id));
+    }
+  };
+
+  const filteredCases = cases.filter(c => {
     const matchesSearch = c.title.toLowerCase().includes(filter.toLowerCase()) || 
                           c.id.toLowerCase().includes(filter.toLowerCase());
     const matchesStatus = statusFilter === 'All' || c.status === statusFilter;
@@ -39,7 +59,10 @@ const CaseList = () => {
           <h2 className="text-2xl font-bold text-navy-900 dark:text-white tracking-tight">Case Management</h2>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Manage, track and update ongoing investigations</p>
         </div>
-        <button className="bg-navy-800 text-white px-5 py-2.5 rounded-md hover:bg-navy-700 transition shadow-sm font-medium text-sm flex items-center gap-2">
+        <button 
+          onClick={() => navigate('/ingest', { state: { tab: 'manual' } })}
+          className="bg-navy-800 text-white px-5 py-2.5 rounded-md hover:bg-navy-700 transition shadow-sm font-medium text-sm flex items-center gap-2"
+        >
           <Briefcase size={16} />
           Create New Case
         </button>
@@ -127,14 +150,29 @@ const CaseList = () => {
                   </td>
                   <td className={`px-6 ${tablePadding} text-right`}>
                     <div className="flex justify-end gap-1">
-                      <button className="p-1.5 text-slate-400 hover:text-navy-700 dark:hover:text-blue-400 hover:bg-navy-50 dark:hover:bg-slate-700 rounded transition" title="View Details">
+                      <button 
+                        onClick={() => navigate(`/analytics/${c.id}`)}
+                        className="p-1.5 text-slate-400 hover:text-purple-700 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-slate-700 rounded transition" 
+                        title="AI Analytics"
+                      >
+                         <BarChart3 size={16} />
+                      </button>
+                      <button 
+                        onClick={() => navigate(`/cases/${c.id}`)}
+                        className="p-1.5 text-slate-400 hover:text-navy-700 dark:hover:text-blue-400 hover:bg-navy-50 dark:hover:bg-slate-700 rounded transition" 
+                        title="View Details"
+                      >
                          <Eye size={16} />
                       </button>
                       <button className="p-1.5 text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-slate-700 rounded transition" title="Edit Case">
                          <Edit size={16} />
                       </button>
-                      <button className="p-1.5 text-slate-400 hover:text-blue-700 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-700 rounded transition" title="Share Securely">
-                         <Share2 size={16} />
+                      <button 
+                        onClick={(e) => handleDelete(c.id, e)}
+                        className="p-1.5 text-slate-400 hover:text-red-700 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-slate-700 rounded transition" 
+                        title="Delete Case"
+                      >
+                         <Trash2 size={16} />
                       </button>
                     </div>
                   </td>

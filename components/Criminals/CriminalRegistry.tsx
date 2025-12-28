@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 import * as faceapi from 'face-api.js';
+import { supabase } from '../../lib/supabaseClient';
 import { 
   UserPlus, 
   ScanFace, 
@@ -34,55 +35,13 @@ import {
   ArrowRight
 } from 'lucide-react';
 
-// Mock Data for "Existing Database"
-const INITIAL_MOCK_CRIMINALS = [
-  {
-    id: 'CR-2023-8819',
-    name: 'Rajinder "Rocky" Singh',
-    age: 34,
-    gender: 'Male',
-    status: 'Wanted',
-    riskLevel: 'High',
-    crimes: ['Armed Robbery', 'Vehicle Theft', 'Assault'],
-    lastSeen: 'Sector 14, Gurgaon',
-    features: ['Scar on left cheek', 'Heavy beard', 'Tattoo on neck'],
-    matchScore: 94,
-    image: 'https://ui-avatars.com/api/?name=Rajinder+Singh&background=random&size=200'
-  },
-  {
-    id: 'CR-2022-1022',
-    name: 'Vikram Malhotra',
-    age: 32,
-    gender: 'Male',
-    status: 'In Custody',
-    riskLevel: 'Medium',
-    crimes: ['Cyber Fraud', 'Identity Theft'],
-    lastSeen: 'Mumbai Airport',
-    features: ['Glasses', 'Clean shaven'],
-    matchScore: 78,
-    image: 'https://ui-avatars.com/api/?name=Vikram+Malhotra&background=random&size=200'
-  },
-  {
-    id: 'CR-2024-0056',
-    name: 'Suresh Kumar',
-    age: 36,
-    gender: 'Male',
-    status: 'Paroled',
-    riskLevel: 'Low',
-    crimes: ['Petty Theft'],
-    lastSeen: 'Delhi Cantt',
-    features: ['Mole on chin'],
-    matchScore: 65,
-    image: 'https://ui-avatars.com/api/?name=Suresh+Kumar&background=random&size=200'
-  }
-];
-
 const CriminalRegistry = () => {
   const [activeTab, setActiveTab] = useState<'register' | 'analyze' | 'database'>('analyze');
   const [inputMethod, setInputMethod] = useState<'upload' | 'camera' | 'video'>('upload');
   
   // -- LINKED DATA STATE --
-  const [criminalsDatabase, setCriminalsDatabase] = useState(INITIAL_MOCK_CRIMINALS);
+  const [criminalsDatabase, setCriminalsDatabase] = useState<any[]>([]);
+  const [isLoadingDB, setIsLoadingDB] = useState(false);
 
   // Registration State
   const [regForm, setRegForm] = useState({
@@ -104,7 +63,7 @@ const CriminalRegistry = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState('');
   const [geminiAnalysis, setGeminiAnalysis] = useState<any>(null);
-  const [matches, setMatches] = useState<typeof INITIAL_MOCK_CRIMINALS>([]);
+  const [matches, setMatches] = useState<any[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   
@@ -134,7 +93,7 @@ const CriminalRegistry = () => {
   const analyzeInputRef = useRef<HTMLInputElement>(null);
   const imagePreviewRef = useRef<HTMLImageElement>(null);
 
-  // --- Initialize Models ---
+  // --- Initialize Models & Fetch Data ---
   useEffect(() => {
     const loadModels = async () => {
       try {
@@ -152,7 +111,28 @@ const CriminalRegistry = () => {
       }
     };
     loadModels();
+    fetchCriminals();
   }, []);
+
+  const fetchCriminals = async () => {
+    setIsLoadingDB(true);
+    try {
+      const { data, error } = await supabase
+        .from('criminals')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching criminals:', error);
+      } else {
+        setCriminalsDatabase(data || []);
+      }
+    } catch (err) {
+      console.error('Supabase fetch error:', err);
+    } finally {
+      setIsLoadingDB(false);
+    }
+  };
 
   // --- Helpers ---
 
@@ -214,9 +194,14 @@ const CriminalRegistry = () => {
   };
 
   // --- Handlers for Database Management ---
-  const handleDeleteCriminal = (id: string) => {
-    if(window.confirm('Are you sure you want to delete this record?')) {
-      setCriminalsDatabase(prev => prev.filter(c => c.id !== id));
+  const handleDeleteCriminal = async (id: string) => {
+    if(window.confirm('Are you sure you want to delete this record permanently?')) {
+      const { error } = await supabase.from('criminals').delete().eq('id', id);
+      if (error) {
+        alert('Failed to delete: ' + error.message);
+      } else {
+        setCriminalsDatabase(prev => prev.filter(c => c.id !== id));
+      }
     }
   };
 
@@ -247,7 +232,7 @@ const CriminalRegistry = () => {
     }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!regForm.name || !regPhoto) {
@@ -255,46 +240,72 @@ const CriminalRegistry = () => {
         return;
     }
 
-    // Create New Criminal Object
-    const newCriminal = {
-        id: `CR-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000)}`,
-        name: regForm.name,
-        age: calculateAge(regForm.dob),
-        gender: regForm.gender,
-        status: 'Wanted', // Default status for new suspects
-        riskLevel: 'High', // Default high risk
-        crimes: [regForm.crimeType],
-        lastSeen: regForm.lastSeen || 'Unknown Location',
-        features: regForm.notes ? [regForm.notes] : ['Recently Registered'],
-        matchScore: 0, // Calculated during analysis
-        image: regPhoto // The uploaded image
-    };
+    setIsLoadingDB(true);
 
-    // Add to Live Database
-    setCriminalsDatabase(prev => [newCriminal, ...prev]);
+    try {
+        // Convert image to Base64 for storage (since we are not using storage buckets for this demo)
+        let imageForDb = regPhoto;
+        if (regPhoto.startsWith('blob:')) {
+            const rawBase64 = await urlToBase64(regPhoto);
+            imageForDb = `data:image/jpeg;base64,${rawBase64}`;
+        }
 
-    // Automatically set the analysis photo to the registered photo
-    setAnalyzePhotos([regPhoto]);
-    setSelectedPhotoIdx(0);
-    resetAnalysisState();
-    setInputMethod('upload');
+        // Create New Criminal Object
+        const newCriminal = {
+            id: `CR-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000)}`,
+            name: regForm.name,
+            age: calculateAge(regForm.dob),
+            gender: regForm.gender,
+            status: 'Wanted', // Default status for new suspects
+            riskLevel: 'High', // Default high risk (Note: matches DB column riskLevel)
+            crimes: [regForm.crimeType],
+            lastSeen: regForm.lastSeen || 'Unknown Location', // matches DB column lastSeen
+            features: regForm.notes ? [regForm.notes] : ['Recently Registered'],
+            matchScore: 0,
+            image: imageForDb
+        };
 
-    alert(`Suspect "${regForm.name}" registered successfully! Redirecting to Face Scan...`);
-    
-    // Reset Form
-    setRegForm({
-      name: '',
-      alias: '',
-      dob: '',
-      gender: 'Male',
-      crimeType: 'Theft',
-      lastSeen: '',
-      notes: ''
-    });
-    setRegPhoto(null);
+        // Insert into Supabase
+        const { error } = await supabase
+            .from('criminals')
+            .insert([newCriminal]);
 
-    // Switch to Analysis Tab to verify
-    setActiveTab('analyze');
+        if (error) {
+            throw error;
+        }
+
+        // Refresh List
+        await fetchCriminals();
+
+        // Automatically set the analysis photo to the registered photo
+        setAnalyzePhotos([regPhoto]);
+        setSelectedPhotoIdx(0);
+        resetAnalysisState();
+        setInputMethod('upload');
+
+        alert(`Suspect "${regForm.name}" registered successfully! Redirecting to Face Scan...`);
+        
+        // Reset Form
+        setRegForm({
+          name: '',
+          alias: '',
+          dob: '',
+          gender: 'Male',
+          crimeType: 'Theft',
+          lastSeen: '',
+          notes: ''
+        });
+        setRegPhoto(null);
+
+        // Switch to Analysis Tab to verify
+        setActiveTab('analyze');
+
+    } catch (err: any) {
+        console.error(err);
+        alert(`Registration Failed: ${err.message || 'Unknown error'}`);
+    } finally {
+        setIsLoadingDB(false);
+    }
   };
 
   // --- Handlers for Camera ---
@@ -580,8 +591,8 @@ const CriminalRegistry = () => {
       const analysisData = JSON.parse(jsonStr);
       setGeminiAnalysis(analysisData);
 
-      // --- MATCH LOGIC WITH REGISTERED USERS ---
-      // We use the criminalsDatabase state which now contains both Mock + Newly Registered users
+      // --- MATCH LOGIC WITH DATABASE USERS ---
+      // We use the criminalsDatabase state which now comes from Supabase
       let potentialMatches = [...criminalsDatabase];
 
       const aiGender = analysisData.gender?.toLowerCase() || '';
@@ -595,7 +606,7 @@ const CriminalRegistry = () => {
          let score = 75; // Stronger base score
 
          // 2. GENDER CHECK
-         if (aiGender) {
+         if (aiGender && c.gender) {
              const dbGender = c.gender.toLowerCase();
              const isMale = dbGender === 'male' || dbGender === 'man';
              const aiMale = aiGender === 'male' || aiGender === 'man';
@@ -654,45 +665,8 @@ const CriminalRegistry = () => {
       }
 
     } catch (error) {
-      console.error("Analysis Failed (Falling back to mock):", error);
-      
-      // FALLBACK MOCK DATA
-      setTimeout(() => {
-          setAnalysisStep('Using Offline Fallback Analysis...');
-          const mockResult = {
-            estimatedAge: "30-35",
-            gender: "Male",
-            ethnicity: "South Asian",
-            distinctiveFeatures: ["Stubble beard", "Stern expression", "Short hair"],
-            facialAttributes: {
-                faceShape: "Oval",
-                complexion: "Wheatish",
-                hairColor: "Black",
-                eyeColor: "Dark Brown"
-            },
-            expression: "Neutral/Serious",
-            accessories: [],
-            qualityScore: 88,
-            riskAssessment: "High",
-            behavioralPsychology: "Subject appears alert and guarded."
-          };
-          setGeminiAnalysis(mockResult);
-
-          // Fallback scoring logic
-          const fallbackMatches = criminalsDatabase.map(c => {
-             const isMock = INITIAL_MOCK_CRIMINALS.find(m => m.id === c.id);
-             return {
-                ...c,
-                // If not mock, it's the user's registration -> High Score
-                matchScore: !isMock ? 98 : (Math.floor(Math.random() * 30) + 50)
-             };
-          }).sort((a, b) => b.matchScore - a.matchScore);
-
-          setMatches(fallbackMatches);
-          if (fallbackMatches.length > 0) {
-            setSelectedProfile({ ...fallbackMatches[0], ...mockResult });
-          }
-      }, 1000);
+      console.error("Analysis Failed:", error);
+      alert('Analysis Failed. See console.');
     } finally {
       setIsAnalyzing(false);
       setAnalysisStep('');
@@ -711,7 +685,7 @@ const CriminalRegistry = () => {
              <span className="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div> System Active
              </span>
-             <span className="text-xs text-slate-500 dark:text-slate-400">Database: {criminalsDatabase.length} Records</span>
+             <span className="text-xs text-slate-500 dark:text-slate-400">Database: {isLoadingDB ? 'Syncing...' : `${criminalsDatabase.length} Records`}</span>
              {modelsLoaded && <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium px-2 border border-blue-200 rounded-full">FaceAPI Ready</span>}
           </div>
         </div>
@@ -1344,8 +1318,8 @@ const CriminalRegistry = () => {
                     </div>
                   </div>
                   <div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-700">
-                    <button type="submit" className="bg-navy-800 text-white px-6 py-2.5 rounded-md font-bold hover:bg-navy-700 transition shadow-lg">
-                      Save Record & Index
+                    <button type="submit" disabled={isLoadingDB} className="bg-navy-800 text-white px-6 py-2.5 rounded-md font-bold hover:bg-navy-700 transition shadow-lg disabled:opacity-50">
+                      {isLoadingDB ? 'Saving to Database...' : 'Save Record & Index'}
                     </button>
                   </div>
                 </form>
@@ -1359,7 +1333,7 @@ const CriminalRegistry = () => {
            <div className="flex justify-between items-center mb-6">
              <div>
                <h3 className="text-lg font-bold text-navy-900 dark:text-white">Criminal Database Registry</h3>
-               <p className="text-sm text-slate-500 dark:text-slate-400">Total Records: {criminalsDatabase.length}</p>
+               <p className="text-sm text-slate-500 dark:text-slate-400">Total Records: {criminalsDatabase.length} {isLoadingDB && '(Syncing...)'}</p>
              </div>
              <button 
                onClick={() => setActiveTab('register')}
@@ -1388,7 +1362,7 @@ const CriminalRegistry = () => {
                  </div>
                  
                  <div className="px-4 pb-3">
-                   <div className="text-xs text-slate-500 dark:text-slate-400 mb-1"><strong>Crimes:</strong> {criminal.crimes.join(', ')}</div>
+                   <div className="text-xs text-slate-500 dark:text-slate-400 mb-1"><strong>Crimes:</strong> {Array.isArray(criminal.crimes) ? criminal.crimes.join(', ') : criminal.crimes}</div>
                    <div className="text-xs text-slate-500 dark:text-slate-400"><strong>Loc:</strong> {criminal.lastSeen}</div>
                  </div>
 
