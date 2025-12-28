@@ -12,6 +12,7 @@ import AnalyticsDashboard from './components/Analytics/AnalyticsDashboard';
 import SearchModule from './components/Search/SearchModule';
 import UserProfile from './components/Profile/UserProfile';
 import CriminalRegistry from './components/Criminals/CriminalRegistry';
+import InterAgencyShare from './components/Share/InterAgencyShare';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Common/Header';
 
@@ -53,9 +54,7 @@ const App = () => {
             <Route path="/analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
             <Route path="/search" element={<ProtectedRoute><SearchModule /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
-            
-            {/* Fallbacks for demo */}
-            <Route path="/share" element={<ProtectedRoute><div className="p-10 font-bold text-slate-400 text-center">Sharing Module Loading...</div></ProtectedRoute>} />
+            <Route path="/share" element={<ProtectedRoute><InterAgencyShare /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

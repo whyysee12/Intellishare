@@ -587,37 +587,52 @@ const CriminalRegistry = () => {
       const aiGender = analysisData.gender?.toLowerCase() || '';
 
       potentialMatches = potentialMatches.map((c) => {
-         let score = Math.floor(Math.random() * 20) + 60; // Base 60-80
-         
-         // Gender Check (Penalty if mismatch, rather than strict filter)
-         if (aiGender && c.gender.toLowerCase() !== aiGender) {
+         // 1. EXACT IMAGE MATCH: If the analyzed image is the same source as the DB record (e.g. Test Scan)
+         if (analyzePhoto === c.image) {
+            return { ...c, matchScore: 99 };
+         }
+
+         let score = 75; // Stronger base score
+
+         // 2. GENDER CHECK
+         if (aiGender) {
              const dbGender = c.gender.toLowerCase();
              const isMale = dbGender === 'male' || dbGender === 'man';
              const aiMale = aiGender === 'male' || aiGender === 'man';
              const isFemale = dbGender === 'female' || dbGender === 'woman';
              const aiFemale = aiGender === 'female' || aiGender === 'woman';
 
-             if (isMale !== aiMale || isFemale !== aiFemale) {
-                 score -= 40; // Heavy penalty for wrong gender
+             if (isMale !== aiMale && isFemale !== aiFemale) {
+                 score -= 45; // Significant penalty
+             } else {
+                 score += 5; // Slight boost for match
              }
          }
 
-         // Age Check
+         // 3. AGE CHECK
          if (c.age && analysisData.estimatedAge) {
             const ageStr = analysisData.estimatedAge.replace(/\D/g,'');
             if (ageStr.length > 0) {
                  const estAge = parseInt(ageStr.substring(0,2));
-                 if (!isNaN(estAge) && Math.abs(c.age - estAge) < 5) score += 10;
+                 if (!isNaN(estAge)) {
+                    const diff = Math.abs(c.age - estAge);
+                    if (diff <= 3) score += 15;
+                    else if (diff <= 7) score += 5;
+                    else if (diff > 15) score -= 15;
+                 }
             }
          }
 
-         // DEMO LOGIC: Boost score for non-mock (user added) items
-         const isMock = INITIAL_MOCK_CRIMINALS.find(m => m.id === c.id);
-         if (!isMock) {
-            score = 98; // Force high match for demo purposes
+         // 4. RANDOM VARIANCE (reduced)
+         score += Math.floor(Math.random() * 10) - 5;
+         
+         // 5. User Added Boost (Optional, but less aggressive)
+         // We verify if it matches the 'New' pattern (ID starts with CR-CurrentYear)
+         if (c.id.startsWith(`CR-${new Date().getFullYear()}`)) {
+             score += 5;
          }
 
-         return { ...c, matchScore: Math.min(Math.max(score, 0), 99) };
+         return { ...c, matchScore: Math.min(Math.max(score, 0), 98) };
       });
 
       // Sort by match score
@@ -1003,8 +1018,8 @@ const CriminalRegistry = () => {
                           </div>
                           <div>
                             <span className="text-xs text-slate-500 block">Quality Score</span>
-                            <span className={`font-bold ${geminiAnalysis.qualityScore > 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                              {geminiAnalysis.qualityScore}/100
+                            <span className={`font-bold ${(geminiAnalysis.qualityScore <= 1 ? geminiAnalysis.qualityScore * 100 : geminiAnalysis.qualityScore) > 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                              {geminiAnalysis.qualityScore <= 1 ? Math.round(geminiAnalysis.qualityScore * 100) : geminiAnalysis.qualityScore}/100
                             </span>
                           </div>
                        </div>
