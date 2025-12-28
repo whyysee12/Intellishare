@@ -1,0 +1,8 @@
+{
+  "name": "IntelliShare - Law Enforcement Intelligence",
+  "description": "Unified platform for data ingestion, indexing, analytics, and secure inter-agency sharing for Law Enforcement.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ]
+}
