@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
-import { BarChart3, GitMerge, AlertTriangle, Activity, ArrowLeft } from 'lucide-react';
+import { BarChart3, GitMerge, AlertTriangle, Activity, ArrowLeft, BrainCircuit } from 'lucide-react';
 import PatternDetection from './PatternDetection';
 import PredictiveAnalytics from './PredictiveAnalytics';
 import LinkAnalysis from './LinkAnalysis';
 import SentimentAnalysis from './SentimentAnalysis';
+import VisualContinuityBoard from './VisualContinuityBoard';
 import { MOCK_CASES } from '../../data/mockData';
 import { Case } from '../../types';
 
@@ -113,6 +114,16 @@ const AnalyticsDashboard = () => {
           <GitMerge size={16} /> Link Analysis
         </button>
         <button
+          onClick={() => setActiveTab('continuity')}
+          className={`px-4 py-2 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors whitespace-nowrap ${
+            activeTab === 'continuity' 
+              ? 'border-navy-600 text-navy-900 dark:text-white dark:border-blue-400' 
+              : 'border-transparent text-slate-500 hover:text-navy-700 dark:text-slate-400 dark:hover:text-slate-200'
+          }`}
+        >
+          <BrainCircuit size={16} /> Continuity Board
+        </button>
+        <button
           onClick={() => setActiveTab('predictive')}
           className={`px-4 py-2 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors whitespace-nowrap ${
             activeTab === 'predictive' 
@@ -139,6 +150,7 @@ const AnalyticsDashboard = () => {
         {activeTab === 'predictive' && <PredictiveAnalytics />}
         {activeTab === 'link' && <LinkAnalysis caseData={caseData} />}
         {activeTab === 'sentiment' && <SentimentAnalysis />}
+        {activeTab === 'continuity' && <VisualContinuityBoard caseData={caseData} />}
       </div>
     </div>
   );

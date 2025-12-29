@@ -32,7 +32,11 @@ import {
   Plus,
   Database,
   Trash2,
-  ArrowRight
+  ArrowRight,
+  Split,
+  Scale,
+  Gavel,
+  Landmark
 } from 'lucide-react';
 
 const CriminalRegistry = () => {
@@ -65,7 +69,9 @@ const CriminalRegistry = () => {
   const [geminiAnalysis, setGeminiAnalysis] = useState<any>(null);
   const [matches, setMatches] = useState<any[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
+  const [profileTab, setProfileTab] = useState<'bio' | 'history'>('bio');
   const [isImageLoaded, setIsImageLoaded] = useState(false);
+  const [matchConfirmed, setMatchConfirmed] = useState(false);
   
   // Face API State
   const [modelsLoaded, setModelsLoaded] = useState(false);
@@ -125,7 +131,15 @@ const CriminalRegistry = () => {
       if (error) {
         console.error('Error fetching criminals:', error);
       } else {
-        setCriminalsDatabase(data || []);
+        // Mock Case History data injection for demo purposes since simple DB might not have it
+        const enrichedData = data?.map(c => ({
+            ...c,
+            caseHistory: c.caseHistory || [
+                { id: `FIR-${new Date().getFullYear()-1}-00${Math.floor(Math.random()*90)+10}`, date: '2023-11-12', type: c.crimes?.[0] || 'Theft', station: 'Central PS', status: 'Charge Sheet Filed' },
+                { id: `FIR-${new Date().getFullYear()-2}-00${Math.floor(Math.random()*90)+10}`, date: '2022-05-20', type: 'Traffic Violation', station: 'Highway Patrol', status: 'Closed (Fine Paid)' }
+            ]
+        })) || [];
+        setCriminalsDatabase(enrichedData);
       }
     } catch (err) {
       console.error('Supabase fetch error:', err);
@@ -143,8 +157,6 @@ const CriminalRegistry = () => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64data = reader.result as string;
-        // The result looks like "data:image/jpeg;base64,....."
-        // We need to split it if present.
         const parts = base64data.split(',');
         resolve(parts.length > 1 ? parts[1] : base64data);
       };
@@ -183,6 +195,8 @@ const CriminalRegistry = () => {
     setSelectedProfile(null);
     setFaceDetections([]);
     setIsImageLoaded(false);
+    setMatchConfirmed(false);
+    setProfileTab('bio');
   };
 
   const calculateAge = (dob: string) => {
@@ -215,11 +229,9 @@ const CriminalRegistry = () => {
   };
 
   const handleTransferToRegistry = () => {
-    // Move current analysis photo to registration
     if (analyzePhoto) {
       setRegPhoto(analyzePhoto);
       setActiveTab('register');
-      // Reset matches to avoid confusion when returning
       resetAnalysisState();
     }
   };
@@ -243,41 +255,32 @@ const CriminalRegistry = () => {
     setIsLoadingDB(true);
 
     try {
-        // Convert image to Base64 for storage (since we are not using storage buckets for this demo)
         let imageForDb = regPhoto;
         if (regPhoto.startsWith('blob:')) {
             const rawBase64 = await urlToBase64(regPhoto);
             imageForDb = `data:image/jpeg;base64,${rawBase64}`;
         }
 
-        // Create New Criminal Object
         const newCriminal = {
             id: `CR-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000)}`,
             name: regForm.name,
             age: calculateAge(regForm.dob),
             gender: regForm.gender,
-            status: 'Wanted', // Default status for new suspects
-            riskLevel: 'High', // Default high risk (Note: matches DB column riskLevel)
+            status: 'Wanted',
+            riskLevel: 'High',
             crimes: [regForm.crimeType],
-            lastSeen: regForm.lastSeen || 'Unknown Location', // matches DB column lastSeen
+            lastSeen: regForm.lastSeen || 'Unknown Location',
             features: regForm.notes ? [regForm.notes] : ['Recently Registered'],
             matchScore: 0,
             image: imageForDb
         };
 
-        // Insert into Supabase
-        const { error } = await supabase
-            .from('criminals')
-            .insert([newCriminal]);
+        const { error } = await supabase.from('criminals').insert([newCriminal]);
 
-        if (error) {
-            throw error;
-        }
+        if (error) throw error;
 
-        // Refresh List
         await fetchCriminals();
 
-        // Automatically set the analysis photo to the registered photo
         setAnalyzePhotos([regPhoto]);
         setSelectedPhotoIdx(0);
         resetAnalysisState();
@@ -285,19 +288,10 @@ const CriminalRegistry = () => {
 
         alert(`Suspect "${regForm.name}" registered successfully! Redirecting to Face Scan...`);
         
-        // Reset Form
         setRegForm({
-          name: '',
-          alias: '',
-          dob: '',
-          gender: 'Male',
-          crimeType: 'Theft',
-          lastSeen: '',
-          notes: ''
+          name: '', alias: '', dob: '', gender: 'Male', crimeType: 'Theft', lastSeen: '', notes: ''
         });
         setRegPhoto(null);
-
-        // Switch to Analysis Tab to verify
         setActiveTab('analyze');
 
     } catch (err: any) {
@@ -338,9 +332,7 @@ const CriminalRegistry = () => {
   };
 
   useEffect(() => {
-    return () => {
-      stopCamera();
-    };
+    return () => { stopCamera(); };
   }, []);
 
   const capturePhoto = () => {
@@ -351,13 +343,11 @@ const CriminalRegistry = () => {
         canvasRef.current.height = videoRef.current.videoHeight;
         context.drawImage(videoRef.current, 0, 0);
         const dataUrl = canvasRef.current.toDataURL('image/jpeg');
-        
-        // Add to photos array and select it
         setAnalyzePhotos(prev => [...prev, dataUrl]);
-        setSelectedPhotoIdx(prev => analyzePhotos.length); // New index
+        setSelectedPhotoIdx(prev => analyzePhotos.length);
         resetAnalysisState();
         stopCamera();
-        setInputMethod('upload'); // Switch to upload view to show result
+        setInputMethod('upload');
       }
     }
   };
@@ -365,7 +355,6 @@ const CriminalRegistry = () => {
   // --- Handlers for Analysis ---
   const handleAnalyzePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      // Fix: Explicitly type file as File to allow URL.createObjectURL to accept it
       const newUrls = Array.from(e.target.files).map((file: File) => URL.createObjectURL(file));
       setAnalyzePhotos(prev => [...prev, ...newUrls]);
       if (analyzePhotos.length === 0) {
@@ -379,7 +368,6 @@ const CriminalRegistry = () => {
     const newPhotos = analyzePhotos.filter((_, i) => i !== idx);
     setAnalyzePhotos(newPhotos);
     if (idx <= selectedPhotoIdx) {
-      // If we removed the current or a previous one, adjust index
       const newIdx = Math.max(0, selectedPhotoIdx - 1);
       setSelectedPhotoIdx(Math.min(newIdx, newPhotos.length - 1));
     }
@@ -453,14 +441,12 @@ const CriminalRegistry = () => {
   };
 
   const handleFrameSelect = (frameUrl: string) => {
-    // When selecting a frame, treat it as the single source for analysis
     setAnalyzePhotos([frameUrl]);
     setSelectedPhotoIdx(0);
     resetAnalysisState();
-    setInputMethod('upload'); // Switch view to analysis
+    setInputMethod('upload');
   };
 
-  // Called when image is fully loaded in DOM
   const handleImageLoad = () => {
     setIsImageLoaded(true);
     if (previewCanvasRef.current && imagePreviewRef.current) {
@@ -471,7 +457,6 @@ const CriminalRegistry = () => {
   };
 
   const runFaceDetection = async () => {
-    // Only run if models are loaded AND image is visible/loaded
     if (!modelsLoaded || !analyzePhoto || !imagePreviewRef.current || !isImageLoaded) return [];
 
     try {
@@ -488,7 +473,6 @@ const CriminalRegistry = () => {
         const displaySize = { width: imgEl.width, height: imgEl.height };
         faceapi.matchDimensions(canvas, displaySize);
         const resizedDetections = faceapi.resizeResults(detections, displaySize);
-        
         faceapi.draw.drawDetections(canvas, resizedDetections);
         faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
       }
@@ -507,15 +491,14 @@ const CriminalRegistry = () => {
     
     setIsAnalyzing(true);
     setAnalysisStep('Initializing Secure AI Gateway...');
+    setMatchConfirmed(false);
     
-    // 1. Run Local FaceAPI First
     let biometricData: any[] = [];
     if (modelsLoaded && isImageLoaded) {
       setAnalysisStep('Scanning Facial Landmarks (Local)...');
       biometricData = await runFaceDetection();
     }
 
-    // 2. Prepare Data for Gemini
     try {
       setAnalysisStep('Preprocessing Image & Extracting Vectors...');
       let base64Image = '';
@@ -529,23 +512,15 @@ const CriminalRegistry = () => {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const biometricContext = biometricData.length > 0 
-        ? `
-          Biometric Analysis Data (FaceAPI):
-          - Detected Faces: ${biometricData.length}
-          - Primary Face Expressions: ${JSON.stringify(biometricData[0]?.expressions)}
-          - Face Descriptor Available: Yes
-        ` 
+        ? `Detected Faces: ${biometricData.length}, Expressions: ${JSON.stringify(biometricData[0]?.expressions)}` 
         : "No local biometric data available.";
 
       const prompt = `
-        You are an advanced forensic AI assistant. Analyze this image of a person for law enforcement purposes.
-        I have performed a preliminary biometric scan locally. Here is the technical data found:
-        ${biometricContext}
+        You are an advanced forensic AI assistant. Analyze this image of a person.
+        Technical data: ${biometricContext}
 
-        Using the provided image AND the technical data above:
-        Identify key facial features, estimated age range, gender, ethnicity, distinctive marks (scars, tattoos, glasses, facial hair), and expression.
-        
-        Return the response in structured JSON format as defined in the schema.
+        Extract: estimated age range, gender, ethnicity, distinctive marks, and expression.
+        JSON format required.
       `;
 
       const response = await ai.models.generateContent({
@@ -563,19 +538,8 @@ const CriminalRegistry = () => {
             properties: {
               estimatedAge: { type: Type.STRING },
               gender: { type: Type.STRING },
-              ethnicity: { type: Type.STRING },
               distinctiveFeatures: { type: Type.ARRAY, items: { type: Type.STRING } },
-              facialAttributes: { 
-                type: Type.OBJECT,
-                properties: {
-                  faceShape: { type: Type.STRING },
-                  complexion: { type: Type.STRING },
-                  hairColor: { type: Type.STRING },
-                  eyeColor: { type: Type.STRING }
-                }
-              },
               expression: { type: Type.STRING },
-              accessories: { type: Type.ARRAY, items: { type: Type.STRING } },
               qualityScore: { type: Type.NUMBER },
               riskAssessment: { type: Type.STRING },
               behavioralPsychology: { type: Type.STRING }
@@ -592,35 +556,28 @@ const CriminalRegistry = () => {
       setGeminiAnalysis(analysisData);
 
       // --- MATCH LOGIC WITH DATABASE USERS ---
-      // We use the criminalsDatabase state which now comes from Supabase
       let potentialMatches = [...criminalsDatabase];
-
       const aiGender = analysisData.gender?.toLowerCase() || '';
 
       potentialMatches = potentialMatches.map((c) => {
-         // 1. EXACT IMAGE MATCH: If the analyzed image is the same source as the DB record (e.g. Test Scan)
          if (analyzePhoto === c.image) {
             return { ...c, matchScore: 99 };
          }
 
-         let score = 75; // Stronger base score
+         let score = 75; 
 
-         // 2. GENDER CHECK
          if (aiGender && c.gender) {
              const dbGender = c.gender.toLowerCase();
-             const isMale = dbGender === 'male' || dbGender === 'man';
-             const aiMale = aiGender === 'male' || aiGender === 'man';
-             const isFemale = dbGender === 'female' || dbGender === 'woman';
-             const aiFemale = aiGender === 'female' || aiGender === 'woman';
-
-             if (isMale !== aiMale && isFemale !== aiFemale) {
-                 score -= 45; // Significant penalty
+             const aiMale = aiGender.includes('male') && !aiGender.includes('female');
+             const dbMale = dbGender.includes('male') && !dbGender.includes('female');
+             
+             if (aiMale !== dbMale) {
+                 score -= 45; 
              } else {
-                 score += 5; // Slight boost for match
+                 score += 5; 
              }
          }
 
-         // 3. AGE CHECK
          if (c.age && analysisData.estimatedAge) {
             const ageStr = analysisData.estimatedAge.replace(/\D/g,'');
             if (ageStr.length > 0) {
@@ -634,22 +591,13 @@ const CriminalRegistry = () => {
             }
          }
 
-         // 4. RANDOM VARIANCE (reduced)
          score += Math.floor(Math.random() * 10) - 5;
-         
-         // 5. User Added Boost (Optional, but less aggressive)
-         // We verify if it matches the 'New' pattern (ID starts with CR-CurrentYear)
-         if (c.id.startsWith(`CR-${new Date().getFullYear()}`)) {
-             score += 5;
-         }
+         if (c.id.startsWith(`CR-${new Date().getFullYear()}`)) score += 5;
 
          return { ...c, matchScore: Math.min(Math.max(score, 0), 98) };
       });
 
-      // Sort by match score
       potentialMatches.sort((a, b) => b.matchScore - a.matchScore);
-      
-      // Filter out low scores
       potentialMatches = potentialMatches.filter(m => m.matchScore > 40);
 
       setMatches(potentialMatches);
@@ -657,11 +605,7 @@ const CriminalRegistry = () => {
       if (potentialMatches.length > 0) {
         if (potentialMatches[0].matchScore > 60) {
             setSelectedProfile({ ...potentialMatches[0], ...analysisData });
-        } else {
-            setSelectedProfile(null);
         }
-      } else {
-        setSelectedProfile(null);
       }
 
     } catch (error) {
@@ -679,14 +623,14 @@ const CriminalRegistry = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 dark:border-slate-700 pb-4 shrink-0">
         <div>
           <h2 className="text-2xl font-bold text-navy-900 dark:text-white tracking-tight flex items-center gap-2">
-            <ScanFace className="text-navy-600 dark:text-blue-400" /> AI Criminal Face Recognition
+            <ScanFace className="text-navy-600 dark:text-blue-400" /> Face-Based Criminal Discovery
           </h2>
           <div className="flex items-center gap-4 mt-1">
              <span className="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div> System Active
              </span>
              <span className="text-xs text-slate-500 dark:text-slate-400">Database: {isLoadingDB ? 'Syncing...' : `${criminalsDatabase.length} Records`}</span>
-             {modelsLoaded && <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium px-2 border border-blue-200 rounded-full">FaceAPI Ready</span>}
+             {modelsLoaded && <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium px-2 border border-blue-200 rounded-full">Biometric Engine Ready</span>}
           </div>
         </div>
         
@@ -700,7 +644,7 @@ const CriminalRegistry = () => {
                 : 'text-slate-500 hover:text-navy-700 dark:hover:text-slate-300'
             }`}
           >
-            Face Scan
+            History Discovery
           </button>
           <button
             onClick={() => setActiveTab('register')}
@@ -727,476 +671,358 @@ const CriminalRegistry = () => {
 
       {/* Main Content Area */}
       {activeTab === 'analyze' && (
-        <div className="grid grid-cols-12 gap-6 flex-1 min-h-0">
+        <div className="flex flex-col h-full gap-4">
           
-          {/* LEFT PANEL: Input (3 cols) */}
-          <div className="col-span-12 lg:col-span-3 flex flex-col gap-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-             <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
-               <h3 className="font-bold text-sm text-navy-900 dark:text-white uppercase tracking-wide">1. Image Input</h3>
+          {/* Legal Safeguard Banner */}
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 rounded-lg flex items-center justify-between shrink-0">
+             <div className="flex items-center gap-3">
+               <Scale size={20} className="text-amber-600 dark:text-amber-400" />
+               <div>
+                 <p className="text-sm font-bold text-amber-800 dark:text-amber-300">Investigative Intelligence Only</p>
+                 <p className="text-xs text-amber-700 dark:text-amber-400">Match results are for lead generation and not admissible as primary evidence in court. Human verification required.</p>
+               </div>
              </div>
-             
-             <div className="p-4 flex-1 flex flex-col gap-4 overflow-y-auto">
-                <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
-                   <button 
-                     onClick={() => {
-                        stopCamera();
-                        setInputMethod('upload');
-                     }}
-                     className={`flex-1 py-2 text-[10px] sm:text-xs font-bold rounded transition ${inputMethod === 'upload' ? 'bg-white dark:bg-slate-600 shadow text-navy-800 dark:text-white' : 'text-slate-500'}`}
-                   >
-                     Upload
-                   </button>
-                   <button 
-                     onClick={() => setInputMethod('camera')}
-                     className={`flex-1 py-2 text-[10px] sm:text-xs font-bold rounded transition ${inputMethod === 'camera' ? 'bg-white dark:bg-slate-600 shadow text-navy-800 dark:text-white' : 'text-slate-500'}`}
-                   >
-                     Live Cam
-                   </button>
-                   <button 
-                     onClick={() => {
-                        stopCamera();
-                        setInputMethod('video');
-                     }}
-                     className={`flex-1 py-2 text-[10px] sm:text-xs font-bold rounded transition ${inputMethod === 'video' ? 'bg-white dark:bg-slate-600 shadow text-navy-800 dark:text-white' : 'text-slate-500'}`}
-                   >
-                     CCTV Video
-                   </button>
-                </div>
+             <div className="text-xs font-mono text-slate-400 bg-white dark:bg-slate-800 px-2 py-1 rounded border border-slate-200 dark:border-slate-700">
+               AUDIT LOG: {new Date().toLocaleTimeString()} • USER: {Math.floor(Math.random()*1000)}
+             </div>
+          </div>
 
-                {inputMethod === 'upload' && (
-                  <div className="h-full flex flex-col gap-3">
-                    {analyzePhotos.length === 0 ? (
-                      <div 
-                        className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-6 flex-1 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition relative group"
-                        onClick={() => {
-                          analyzeInputRef.current?.click();
-                        }}
-                      >
-                        <div className="w-12 h-12 bg-blue-50 dark:bg-slate-700 rounded-full flex items-center justify-center text-navy-600 dark:text-blue-400 mb-3">
-                          <Upload size={24} />
-                        </div>
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Click to Upload</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">JPG, PNG (Multiple Allowed)</p>
-                      </div>
-                    ) : (
-                      <div className="flex-1 flex flex-col gap-3">
-                        {/* Main Preview */}
-                        <div className="relative flex-1 bg-slate-100 dark:bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center border border-slate-200 dark:border-slate-700">
-                          {analyzePhoto && (
-                            <>
-                              <img 
-                                ref={imagePreviewRef}
-                                src={analyzePhoto} 
-                                className="max-w-full max-h-full object-contain" 
-                                alt="Preview"
-                                crossOrigin="anonymous" 
-                                onLoad={handleImageLoad}
-                              />
-                              <canvas ref={previewCanvasRef} className="absolute top-0 left-0 pointer-events-none" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  removePhoto(selectedPhotoIdx);
-                                }}
-                                className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full cursor-pointer hover:bg-red-600 transition"
-                              >
-                                <X size={14} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                        
-                        {/* Thumbnail Strip */}
-                        <div className="flex gap-2 overflow-x-auto p-1 h-20 shrink-0 custom-scrollbar">
-                          {analyzePhotos.map((photo, idx) => (
-                            <div 
-                              key={idx} 
-                              onClick={() => { 
-                                setSelectedPhotoIdx(idx); 
-                                resetAnalysisState();
-                              }}
-                              className={`relative w-16 h-16 rounded-md cursor-pointer overflow-hidden border-2 shrink-0 transition-all ${selectedPhotoIdx === idx ? 'border-navy-600 ring-1 ring-navy-600' : 'border-slate-200 dark:border-slate-600 hover:border-slate-400'}`}
-                            >
-                              <img src={photo} className="w-full h-full object-cover" alt={`Thumb ${idx}`} />
-                            </div>
-                          ))}
-                          <button 
-                            onClick={() => analyzeInputRef.current?.click()} 
-                            className="w-16 h-16 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-md flex items-center justify-center text-slate-400 hover:text-navy-600 hover:border-navy-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition shrink-0"
-                          >
-                            <Plus size={20} />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    <input type="file" multiple ref={analyzeInputRef} className="hidden" accept="image/*" onChange={handleAnalyzePhotoUpload} />
+          <div className="grid grid-cols-12 gap-6 flex-1 min-h-0">
+            {/* LEFT PANEL: Input (3 cols) */}
+            <div className="col-span-12 lg:col-span-3 flex flex-col gap-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
+                <h3 className="font-bold text-sm text-navy-900 dark:text-white uppercase tracking-wide">1. Probe Image</h3>
+              </div>
+              
+              <div className="p-4 flex-1 flex flex-col gap-4 overflow-y-auto">
+                  <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-700 rounded-lg">
+                    <button onClick={() => { stopCamera(); setInputMethod('upload'); }} className={`flex-1 py-2 text-[10px] sm:text-xs font-bold rounded transition ${inputMethod === 'upload' ? 'bg-white dark:bg-slate-600 shadow text-navy-800 dark:text-white' : 'text-slate-500'}`}>Upload</button>
+                    <button onClick={() => setInputMethod('camera')} className={`flex-1 py-2 text-[10px] sm:text-xs font-bold rounded transition ${inputMethod === 'camera' ? 'bg-white dark:bg-slate-600 shadow text-navy-800 dark:text-white' : 'text-slate-500'}`}>Camera</button>
+                    <button onClick={() => { stopCamera(); setInputMethod('video'); }} className={`flex-1 py-2 text-[10px] sm:text-xs font-bold rounded transition ${inputMethod === 'video' ? 'bg-white dark:bg-slate-600 shadow text-navy-800 dark:text-white' : 'text-slate-500'}`}>CCTV</button>
                   </div>
-                )}
 
-                {inputMethod === 'camera' && (
-                  <div className="relative h-64 bg-black rounded-xl overflow-hidden flex flex-col">
-                    {isCameraActive ? (
-                      <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]" />
-                    ) : analyzePhoto && inputMethod === 'camera' ? (
-                      <div className="relative w-full h-full">
-                        <img 
-                          ref={imagePreviewRef} 
-                          src={analyzePhoto} 
-                          className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]" 
-                          alt="Captured"
-                          onLoad={handleImageLoad}
-                        />
-                        <canvas ref={previewCanvasRef} className="absolute inset-0 w-full h-full pointer-events-none transform scale-x-[-1]" />
-                      </div>
-                    ) : (
-                      <div className="flex-1 flex items-center justify-center text-slate-500">
-                        <p className="text-xs">Camera Inactive</p>
-                      </div>
-                    )}
-                    
-                    <canvas ref={canvasRef} className="hidden" />
-                    
-                    <div className="absolute bottom-4 left-0 w-full flex justify-center gap-3 z-10">
-                      {!isCameraActive ? (
-                        <button onClick={startCamera} className="bg-navy-800 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg">Start Cam</button>
+                  {inputMethod === 'upload' && (
+                    <div className="h-full flex flex-col gap-3">
+                      {analyzePhotos.length === 0 ? (
+                        <div 
+                          className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl flex-1 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+                          onClick={() => analyzeInputRef.current?.click()}
+                        >
+                          <Upload size={24} className="text-navy-600 dark:text-blue-400 mb-2" />
+                          <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Upload Suspect Photo</p>
+                        </div>
                       ) : (
-                        <>
-                          <button onClick={capturePhoto} className="bg-white text-red-600 p-3 rounded-full shadow-lg hover:scale-110 transition"><Camera size={20} /></button>
-                          <button onClick={stopCamera} className="bg-red-600 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-lg">Stop</button>
-                        </>
+                        <div className="flex-1 flex flex-col gap-3">
+                          <div className="relative flex-1 bg-slate-100 dark:bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                            {analyzePhoto && (
+                              <>
+                                <img ref={imagePreviewRef} src={analyzePhoto} className="max-w-full max-h-full object-contain" alt="Preview" crossOrigin="anonymous" onLoad={handleImageLoad} />
+                                <canvas ref={previewCanvasRef} className="absolute top-0 left-0 pointer-events-none" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                <button onClick={(e) => { e.stopPropagation(); removePhoto(selectedPhotoIdx); }} className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full cursor-pointer hover:bg-red-600 transition"><X size={14} /></button>
+                              </>
+                            )}
+                          </div>
+                          <div className="flex gap-2 overflow-x-auto p-1 h-20 shrink-0 custom-scrollbar">
+                            {analyzePhotos.map((photo, idx) => (
+                              <div key={idx} onClick={() => { setSelectedPhotoIdx(idx); resetAnalysisState(); }} className={`relative w-16 h-16 rounded-md cursor-pointer overflow-hidden border-2 shrink-0 transition-all ${selectedPhotoIdx === idx ? 'border-navy-600 ring-1 ring-navy-600' : 'border-slate-200 dark:border-slate-600'}`}>
+                                <img src={photo} className="w-full h-full object-cover" alt={`Thumb ${idx}`} />
+                              </div>
+                            ))}
+                            <button onClick={() => analyzeInputRef.current?.click()} className="w-16 h-16 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-md flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-800 transition shrink-0"><Plus size={20} className="text-slate-400" /></button>
+                          </div>
+                        </div>
+                      )}
+                      <input type="file" multiple ref={analyzeInputRef} className="hidden" accept="image/*" onChange={handleAnalyzePhotoUpload} />
+                    </div>
+                  )}
+
+                  {inputMethod === 'camera' && (
+                    <div className="relative h-64 bg-black rounded-xl overflow-hidden flex flex-col">
+                      {isCameraActive ? (
+                        <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]" />
+                      ) : analyzePhoto ? (
+                        <div className="relative w-full h-full">
+                          <img ref={imagePreviewRef} src={analyzePhoto} className="absolute inset-0 w-full h-full object-cover transform scale-x-[-1]" alt="Captured" onLoad={handleImageLoad} />
+                          <canvas ref={previewCanvasRef} className="absolute inset-0 w-full h-full pointer-events-none transform scale-x-[-1]" />
+                        </div>
+                      ) : <div className="flex-1 flex items-center justify-center text-slate-500"><p className="text-xs">Camera Inactive</p></div>}
+                      <canvas ref={canvasRef} className="hidden" />
+                      <div className="absolute bottom-4 left-0 w-full flex justify-center gap-3 z-10">
+                        {!isCameraActive ? <button onClick={startCamera} className="bg-navy-800 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg">Start Cam</button> : 
+                        <><button onClick={capturePhoto} className="bg-white text-red-600 p-3 rounded-full shadow-lg hover:scale-110 transition"><Camera size={20} /></button><button onClick={stopCamera} className="bg-red-600 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-lg">Stop</button></>}
+                      </div>
+                    </div>
+                  )}
+
+                  {inputMethod === 'video' && (
+                    <div className="flex flex-col gap-3 h-full">
+                      {!videoFile ? (
+                        <div className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl flex-1 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition" onClick={() => videoInputRef.current?.click()}>
+                          <Film size={24} className="text-purple-600 dark:text-purple-400 mb-2" />
+                          <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Upload Footage</p>
+                          <input type="file" ref={videoInputRef} className="hidden" accept="video/*" onChange={handleVideoUpload} />
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
+                            <video src={videoUrl || undefined} controls className="w-full h-full object-contain" />
+                            <button onClick={() => { setVideoFile(null); setExtractedFrames([]); setAnalyzePhotos([]); }} className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full"><X size={14} /></button>
+                          </div>
+                          <div className="bg-slate-50 dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
+                            <div className="flex justify-between items-center mb-2"><span className="text-xs font-bold text-slate-500">Extracted Frames</span>{isExtracting && <Loader size={14} className="animate-spin" />}</div>
+                            <div className="grid grid-cols-3 gap-2">{extractedFrames.map((frame, idx) => (<div key={idx} onClick={() => handleFrameSelect(frame.url)} className={`aspect-square relative cursor-pointer rounded overflow-hidden border-2 transition-all ${analyzePhoto === frame.url ? 'border-emerald-500' : 'border-transparent'}`}><img src={frame.url} className="w-full h-full object-cover" alt={`Frame ${idx}`} />{frame.faceCount > 0 && <div className="absolute top-1 right-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 rounded-full"><ScanFace size={10} /> {frame.faceCount}</div>}</div>))}</div>
+                          </div>
+                        </div>
                       )}
                     </div>
+                  )}
+
+                  <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <button onClick={analyzeImageWithGemini} disabled={!analyzePhoto || isAnalyzing} className="w-full bg-navy-800 text-white py-3 rounded-lg font-bold text-sm hover:bg-navy-700 transition flex items-center justify-center gap-2 disabled:opacity-50 shadow-md">
+                      {isAnalyzing ? <Loader className="animate-spin" size={18} /> : <ScanFace size={18} />}
+                      {isAnalyzing ? 'Scanning...' : 'Identify Suspect'}
+                    </button>
                   </div>
-                )}
+              </div>
+            </div>
 
-                {inputMethod === 'video' && (
-                  <div className="flex flex-col gap-3 h-full">
-                    {!videoFile ? (
-                      <div 
-                        className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl flex-1 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition"
-                        onClick={() => videoInputRef.current?.click()}
-                      >
-                        <div className="w-12 h-12 bg-purple-50 dark:bg-slate-700 rounded-full flex items-center justify-center text-purple-600 dark:text-purple-400 mb-3">
-                          <Film size={24} />
-                        </div>
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Upload CCTV Footage</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">MP4, AVI, MKV (Max 50MB)</p>
-                        <input type="file" ref={videoInputRef} className="hidden" accept="video/mp4,video/avi,video/*" onChange={handleVideoUpload} />
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
-                          <video src={videoUrl || undefined} controls className="w-full h-full object-contain" />
-                          <button 
-                            onClick={() => { setVideoFile(null); setExtractedFrames([]); setAnalyzePhotos([]); }}
-                            className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-red-600 transition"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                        
-                        <div className="bg-slate-50 dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Extracted Frames</span>
-                            {isExtracting && <Loader size={14} className="animate-spin text-navy-600" />}
-                          </div>
-                          {extractedFrames.length > 0 ? (
-                            <div className="grid grid-cols-3 gap-2">
-                              {extractedFrames.map((frame, idx) => (
-                                <div 
-                                  key={idx}
-                                  onClick={() => handleFrameSelect(frame.url)}
-                                  className={`aspect-square relative cursor-pointer rounded overflow-hidden border-2 transition-all ${
-                                    analyzePhoto === frame.url ? 'border-emerald-500 ring-2 ring-emerald-200' : 
-                                    frame.faceCount > 0 ? 'border-blue-400' : 'border-transparent hover:border-slate-300'
-                                  }`}
-                                >
-                                  <img src={frame.url} className="w-full h-full object-cover" alt={`Frame ${idx}`} />
-                                  {frame.faceCount > 0 && (
-                                     <div className="absolute top-1 right-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 rounded-full flex items-center shadow-sm">
-                                       <ScanFace size={10} className="mr-1" /> {frame.faceCount}
-                                     </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-center py-4 text-xs text-slate-400">
-                              {isExtracting ? 'Extracting & Scanning...' : 'Processing video...'}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+            {/* CENTER PANEL: Matches (4 cols) */}
+            <div className="col-span-12 lg:col-span-4 flex flex-col gap-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden relative">
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                <h3 className="font-bold text-sm text-navy-900 dark:text-white uppercase tracking-wide">2. Potential Matches</h3>
+                {matches.length > 0 && <span className="text-[10px] bg-navy-100 text-navy-700 px-2 py-0.5 rounded-full font-bold">{matches.length} Found</span>}
+              </div>
 
-                <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-700">
-                   <button 
-                     onClick={analyzeImageWithGemini}
-                     disabled={!analyzePhoto || isAnalyzing}
-                     className="w-full bg-navy-800 text-white py-3 rounded-lg font-bold text-sm hover:bg-navy-700 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-                   >
-                     {isAnalyzing ? <Loader className="animate-spin" size={18} /> : <ScanFace size={18} />}
-                     {isAnalyzing ? 'Processing...' : 'Run Analysis'}
-                   </button>
-                </div>
-             </div>
-          </div>
-
-          {/* CENTER PANEL: Analysis & Matches (5 cols) */}
-          <div className="col-span-12 lg:col-span-5 flex flex-col gap-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden relative">
-             {isAnalyzing && (
-               <div className="absolute inset-0 bg-white/90 dark:bg-slate-800/90 z-20 flex flex-col items-center justify-center text-center p-8 backdrop-blur-sm">
-                  <div className="relative w-24 h-24 mb-6">
-                    <div className="absolute inset-0 border-4 border-slate-200 dark:border-slate-700 rounded-full"></div>
-                    <div className="absolute inset-0 border-4 border-navy-600 border-t-transparent rounded-full animate-spin"></div>
-                    <ScanFace size={40} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-navy-600 dark:text-blue-400 animate-pulse" />
-                  </div>
-                  <h3 className="text-lg font-bold text-navy-900 dark:text-white mb-2">AI Analysis in Progress</h3>
-                  <p className="text-sm font-mono text-navy-600 dark:text-blue-400">{analysisStep}</p>
-                  <p className="text-xs text-slate-500 mt-4">Generating biometric signature & querying CCTNS...</p>
-               </div>
-             )}
-
-             <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
-               <h3 className="font-bold text-sm text-navy-900 dark:text-white uppercase tracking-wide">2. Analysis Results</h3>
-               {geminiAnalysis && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-bold">Analysis Complete</span>}
-             </div>
-
-             <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
-                {!geminiAnalysis ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-50">
-                    <Search size={48} className="mb-4" />
-                    <p className="text-sm text-center px-8">Upload an image and run analysis to view AI-generated attributes and potential database matches.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-6 animate-slide-up">
-                    {/* Gemini Attributes Card */}
-                    <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-4 border border-slate-200 dark:border-slate-600">
-                       <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-3 flex items-center gap-2">
-                         <Fingerprint size={14} /> Biometric Estimation
-                       </h4>
-                       <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
-                          <div>
-                            <span className="text-xs text-slate-500 block">Est. Age</span>
-                            <span className="font-bold text-navy-900 dark:text-white">{geminiAnalysis.estimatedAge}</span>
-                          </div>
-                          <div>
-                            <span className="text-xs text-slate-500 block">Gender</span>
-                            <span className="font-bold text-navy-900 dark:text-white">{geminiAnalysis.gender}</span>
-                          </div>
-                          <div>
-                            <span className="text-xs text-slate-500 block">Expression</span>
-                            <span className="font-bold text-navy-900 dark:text-white">{geminiAnalysis.expression}</span>
-                          </div>
-                          <div>
-                            <span className="text-xs text-slate-500 block">Quality Score</span>
-                            <span className={`font-bold ${(geminiAnalysis.qualityScore <= 1 ? geminiAnalysis.qualityScore * 100 : geminiAnalysis.qualityScore) > 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                              {geminiAnalysis.qualityScore <= 1 ? Math.round(geminiAnalysis.qualityScore * 100) : geminiAnalysis.qualityScore}/100
-                            </span>
-                          </div>
-                       </div>
-                       
-                       <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-600">
-                          <span className="text-xs text-slate-500 block mb-1">Distinctive Features</span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {geminiAnalysis.distinctiveFeatures?.map((feat: string, i: number) => (
-                              <span key={i} className="text-[10px] bg-white dark:bg-slate-600 border border-slate-200 dark:border-slate-500 px-2 py-1 rounded-md font-medium text-slate-700 dark:text-slate-200">
-                                {feat}
-                              </span>
-                            )) || <span className="text-xs text-slate-400">None detected</span>}
-                          </div>
-                       </div>
+              <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
+                  {!geminiAnalysis ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-50">
+                      <Search size={48} className="mb-4" />
+                      <p className="text-sm text-center px-8">Run identification to search criminal history database.</p>
                     </div>
-
-                    {/* Face API Detections Debug Info (Visible if detected) */}
-                    {faceDetections.length > 0 && (
-                      <div className="bg-blue-50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-800">
-                        <h4 className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase mb-2">Face Detection Telemetry</h4>
-                        <div className="flex gap-4 text-xs text-slate-600 dark:text-slate-300">
-                           <span>Faces Detected: <strong>{faceDetections.length}</strong></span>
-                           <span>Primary Confidence: <strong>{Math.round(faceDetections[0]?.detection?.score * 100)}%</strong></span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Matches List */}
-                    <div>
-                       <div className="flex flex-col gap-2 mb-3">
-                         <div className="flex justify-between items-center">
-                            <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">
-                              Potential Database Matches
-                            </h4>
-                            <span className="text-xs normal-case bg-navy-100 text-navy-700 px-2 py-0.5 rounded-full">{processedMatches.length} found</span>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Biometric Summary */}
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 border border-slate-200 dark:border-slate-600 text-xs">
+                         <h4 className="font-bold text-slate-500 mb-2 uppercase">Probe Attributes</h4>
+                         <div className="flex flex-wrap gap-2">
+                            <span className="bg-white dark:bg-slate-600 px-2 py-1 rounded border border-slate-200 dark:border-slate-500">{geminiAnalysis.gender}</span>
+                            <span className="bg-white dark:bg-slate-600 px-2 py-1 rounded border border-slate-200 dark:border-slate-500">Age: {geminiAnalysis.estimatedAge}</span>
+                            <span className="bg-white dark:bg-slate-600 px-2 py-1 rounded border border-slate-200 dark:border-slate-500">Quality: {geminiAnalysis.qualityScore}/100</span>
                          </div>
-                         
-                         {/* Filter Controls */}
-                         {matches.length > 0 && (
-                           <div className="flex flex-wrap gap-2">
-                             <div className="flex items-center gap-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-2 py-1">
-                               <ArrowUpDown size={12} className="text-slate-400" />
-                               <select 
-                                 value={sortBy} 
-                                 onChange={(e) => setSortBy(e.target.value as any)}
-                                 className="text-xs bg-transparent text-slate-700 dark:text-slate-300 outline-none border-none cursor-pointer"
-                               >
-                                 <option value="score">Sort: Confidence</option>
-                                 <option value="risk">Sort: Risk Level</option>
-                                 <option value="location">Sort: Last Location</option>
-                               </select>
+                      </div>
+
+                      {/* Matches List */}
+                      <div className="space-y-3">
+                        {matches.length > 0 ? matches.map((match) => (
+                          <div 
+                            key={match.id}
+                            onClick={() => {
+                                setSelectedProfile({ ...match, ...geminiAnalysis });
+                                setMatchConfirmed(false);
+                                setProfileTab('bio');
+                            }}
+                            className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                              selectedProfile?.id === match.id 
+                                ? 'bg-navy-50 border-navy-500 ring-1 ring-navy-500 dark:bg-navy-900/30 dark:border-blue-400' 
+                                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:border-navy-300'
+                            }`}
+                          >
+                             <img src={match.image} className="w-12 h-12 rounded bg-slate-200 object-cover shrink-0" alt="Match" />
+                             <div className="flex-1 min-w-0">
+                                <div className="flex justify-between">
+                                  <h5 className="text-sm font-bold text-navy-900 dark:text-white truncate">{match.name}</h5>
+                                  <span className={`text-xs font-bold ${match.matchScore > 85 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                    {match.matchScore}%
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-end mt-1">
+                                   <div>
+                                     <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{match.id}</p>
+                                     <span className={`text-[10px] uppercase font-bold ${
+                                       match.matchScore > 85 ? 'text-emerald-600' : 'text-amber-600'
+                                     }`}>
+                                       {match.matchScore > 85 ? 'Strong Match' : 'Possible Match'}
+                                     </span>
+                                   </div>
+                                   <ArrowRight size={14} className={`text-slate-300 ${selectedProfile?.id === match.id ? 'text-navy-500' : ''}`} />
+                                </div>
                              </div>
-                             
-                             <div className="flex items-center gap-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded px-2 py-1">
-                               <Filter size={12} className="text-slate-400" />
-                               <select 
-                                 value={filterRisk} 
-                                 onChange={(e) => setFilterRisk(e.target.value)}
-                                 className="text-xs bg-transparent text-slate-700 dark:text-slate-300 outline-none border-none cursor-pointer"
-                               >
-                                 <option value="All">Risk: All</option>
-                                 <option value="High">High</option>
-                                 <option value="Medium">Medium</option>
-                                 <option value="Low">Low</option>
-                               </select>
-                             </div>
-                           </div>
-                         )}
-                       </div>
-                       
-                       <div className="space-y-3">
-                         {processedMatches.length > 0 ? processedMatches.map((match) => (
-                           <div 
-                             key={match.id}
-                             onClick={() => setSelectedProfile({ ...match, ...geminiAnalysis })}
-                             className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                               selectedProfile?.id === match.id 
-                                 ? 'bg-navy-50 border-navy-500 ring-1 ring-navy-500 dark:bg-navy-900/30 dark:border-blue-400' 
-                                 : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:border-navy-300'
-                             }`}
-                           >
-                              <img src={match.image} className="w-12 h-12 rounded bg-slate-200 object-cover shrink-0" alt="Match" />
-                              <div className="flex-1 min-w-0">
-                                 <div className="flex justify-between">
-                                   <h5 className="text-sm font-bold text-navy-900 dark:text-white truncate">{match.name}</h5>
-                                   <span className={`text-xs font-bold ${match.matchScore > 90 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                     {match.matchScore}%
-                                   </span>
-                                 </div>
-                                 <p className="text-xs text-slate-500 dark:text-slate-400">{match.id}</p>
-                                 <div className="flex gap-2 mt-1">
-                                    <span className="text-[10px] bg-red-50 text-red-700 border border-red-100 px-1.5 rounded uppercase font-bold">{match.status}</span>
-                                    <span className={`text-[10px] px-1.5 rounded uppercase font-bold border ${
-                                      match.riskLevel === 'High' ? 'bg-red-50 text-red-700 border-red-100' : 
-                                      match.riskLevel === 'Medium' ? 'bg-orange-50 text-orange-700 border-orange-100' : 
-                                      'bg-slate-100 text-slate-700 border-slate-200'
-                                    }`}>{match.riskLevel} Risk</span>
-                                 </div>
-                              </div>
-                           </div>
-                         )) : (
-                           <div className="p-4 bg-amber-50 border border-amber-100 rounded-lg text-center">
-                             <AlertTriangle className="mx-auto text-amber-500 mb-2" size={24} />
-                             <p className="text-sm font-bold text-amber-800">No Matches Found</p>
-                             <p className="text-xs text-amber-700 mt-1 mb-3">Subject not in database.</p>
-                             <button 
-                               onClick={handleTransferToRegistry}
-                               className="bg-navy-800 text-white px-4 py-2 rounded text-xs font-bold hover:bg-navy-700 transition"
-                             >
-                               Register This Suspect
-                             </button>
-                           </div>
-                         )}
-                       </div>
-                    </div>
-                  </div>
-                )}
-             </div>
-          </div>
-
-          {/* RIGHT PANEL: Profile Details (4 cols) */}
-          <div className="col-span-12 lg:col-span-4 flex flex-col bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-             <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">
-               <h3 className="font-bold text-sm text-navy-900 dark:text-white uppercase tracking-wide">3. Criminal Profile</h3>
-             </div>
-
-             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-                {selectedProfile ? (
-                  <div className="space-y-6 animate-fade-in">
-                     {/* Header */}
-                     <div className="text-center">
-                        <div className="relative inline-block">
-                          <img src={selectedProfile.image} className="w-24 h-24 rounded-full border-4 border-slate-100 dark:border-slate-700 shadow-md mx-auto object-cover" alt="Profile" />
-                          <span className={`absolute bottom-1 right-1 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-white text-[10px] font-bold ${selectedProfile.riskLevel === 'High' ? 'bg-red-500' : 'bg-orange-500'}`}>
-                            {selectedProfile.riskLevel === 'High' ? 'H' : 'M'}
-                          </span>
-                        </div>
-                        <h2 className="mt-3 text-xl font-bold text-navy-900 dark:text-white">{selectedProfile.name}</h2>
-                        <p className="text-sm font-mono text-slate-500">{selectedProfile.id}</p>
-                     </div>
-
-                     {/* Actions */}
-                     <div className="flex gap-2 justify-center">
-                        <button className="flex items-center gap-1.5 px-3 py-1.5 bg-navy-800 text-white text-xs font-bold rounded hover:bg-navy-700 transition">
-                          <FileText size={14} /> Full Report
-                        </button>
-                        <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 text-slate-700 text-xs font-bold rounded hover:bg-slate-50 transition">
-                          <Share2 size={14} /> Share
-                        </button>
-                     </div>
-
-                     {/* Info Grid */}
-                     <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-700/30 p-4 rounded-lg border border-slate-100 dark:border-slate-600">
-                        <div>
-                          <span className="text-[10px] uppercase text-slate-400 font-bold">Status</span>
-                          <p className="text-sm font-bold text-red-600">{selectedProfile.status}</p>
-                        </div>
-                        <div>
-                          <span className="text-[10px] uppercase text-slate-400 font-bold">Last Location</span>
-                          <div className="flex items-center gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-                             <MapPin size={12} className="text-red-500" /> {selectedProfile.lastSeen}
                           </div>
-                        </div>
-                     </div>
+                        )) : (
+                          <div className="p-4 bg-amber-50 border border-amber-100 rounded-lg text-center">
+                            <AlertTriangle className="mx-auto text-amber-500 mb-2" size={24} />
+                            <p className="text-sm font-bold text-amber-800">No Records Found</p>
+                            <button onClick={handleTransferToRegistry} className="mt-2 text-xs font-bold text-navy-700 underline">Register New Profile</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+              </div>
+            </div>
 
-                     {/* Timeline */}
-                     <div>
-                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Criminal History</h4>
-                        <div className="space-y-4 relative border-l-2 border-slate-200 ml-2 pl-4">
-                           {selectedProfile.crimes?.map((crime: string, i: number) => (
-                             <div key={i} className="relative">
-                               <div className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full bg-red-500 border border-white"></div>
-                               <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{crime}</p>
-                               <p className="text-xs text-slate-500">202{3-i} • New Delhi</p>
-                             </div>
-                           ))}
-                        </div>
-                     </div>
-
-                     {/* AI Insights */}
-                     {selectedProfile.behavioralPsychology && (
-                       <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
-                          <h4 className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase mb-2 flex items-center gap-2">
-                            <Activity size={14} /> AI Behavioral Insight
-                          </h4>
-                          <p className="text-xs text-blue-900 dark:text-blue-200 leading-relaxed italic">
-                            "{selectedProfile.behavioralPsychology}"
-                          </p>
-                       </div>
-                     )}
-                  </div>
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-50">
-                    <User size={48} className="mb-4" />
-                    <p className="text-sm text-center">Select a match to view detailed criminal profile.</p>
-                  </div>
+            {/* RIGHT PANEL: History Discovery (5 cols) */}
+            <div className="col-span-12 lg:col-span-5 flex flex-col bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                <h3 className="font-bold text-sm text-navy-900 dark:text-white uppercase tracking-wide">3. History Discovery</h3>
+                {selectedProfile && (
+                    <div className="flex bg-slate-200 dark:bg-slate-700 rounded-md p-0.5">
+                        <button 
+                            onClick={() => setProfileTab('bio')}
+                            className={`px-2 py-1 text-[10px] font-bold rounded ${profileTab === 'bio' ? 'bg-white dark:bg-slate-600 shadow-sm text-navy-900 dark:text-white' : 'text-slate-500'}`}
+                        >
+                            Verify
+                        </button>
+                        <button 
+                            onClick={() => setProfileTab('history')}
+                            className={`px-2 py-1 text-[10px] font-bold rounded ${profileTab === 'history' ? 'bg-white dark:bg-slate-600 shadow-sm text-navy-900 dark:text-white' : 'text-slate-500'}`}
+                        >
+                            History
+                        </button>
+                    </div>
                 )}
-             </div>
-          </div>
+              </div>
 
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                 {selectedProfile ? (
+                   <div className="space-y-6 animate-fade-in">
+                      {/* Header Profile Info */}
+                      <div className="flex items-center gap-4 border-b border-slate-100 dark:border-slate-700 pb-4">
+                         <div className="relative">
+                           <img src={selectedProfile.image} className="w-16 h-16 rounded-full border-2 border-slate-200 object-cover" />
+                           <span className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold border border-white ${selectedProfile.riskLevel === 'High' ? 'bg-red-500' : 'bg-orange-500'}`}>
+                             {selectedProfile.riskLevel === 'High' ? 'H' : 'M'}
+                           </span>
+                         </div>
+                         <div>
+                            <h2 className="text-lg font-bold text-navy-900 dark:text-white leading-tight">{selectedProfile.name}</h2>
+                            <p className="text-xs text-slate-500 font-mono">{selectedProfile.id}</p>
+                            <div className="flex gap-2 mt-1">
+                                <span className="text-[10px] bg-red-50 text-red-700 border border-red-100 px-1.5 rounded uppercase font-bold">{selectedProfile.status}</span>
+                            </div>
+                         </div>
+                      </div>
+
+                      {/* TAB: BIO & VERIFICATION */}
+                      {profileTab === 'bio' && (
+                          <div className="space-y-6">
+                              {/* Side by Side Verification */}
+                              <div className="bg-slate-50 dark:bg-slate-700/30 p-4 rounded-lg border border-slate-200 dark:border-slate-600">
+                                  <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
+                                      <Split size={14} /> Identity Verification
+                                  </h4>
+                                  <div className="flex gap-4 items-center justify-center">
+                                      <div className="text-center">
+                                          <div className="w-20 h-20 rounded-md overflow-hidden border-2 border-slate-300 dark:border-slate-500 mb-1">
+                                              <img src={analyzePhoto!} className="w-full h-full object-cover" alt="Probe" />
+                                          </div>
+                                          <span className="text-[10px] text-slate-500 uppercase font-bold">Probe</span>
+                                      </div>
+                                      
+                                      <div className="flex flex-col items-center gap-1">
+                                          <div className={`w-8 h-1 rounded-full ${selectedProfile.matchScore > 85 ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
+                                          <span className={`text-xs font-black ${selectedProfile.matchScore > 85 ? 'text-emerald-600' : 'text-amber-600'}`}>{selectedProfile.matchScore}%</span>
+                                      </div>
+
+                                      <div className="text-center">
+                                          <div className="w-20 h-20 rounded-md overflow-hidden border-2 border-slate-300 dark:border-slate-500 mb-1">
+                                              <img src={selectedProfile.image} className="w-full h-full object-cover" alt="Record" />
+                                          </div>
+                                          <span className="text-[10px] text-slate-500 uppercase font-bold">Record</span>
+                                      </div>
+                                  </div>
+                                  
+                                  {!matchConfirmed ? (
+                                      <button 
+                                        onClick={() => setMatchConfirmed(true)}
+                                        className="w-full mt-4 bg-navy-800 text-white py-2 rounded text-xs font-bold hover:bg-navy-700 transition"
+                                      >
+                                        Confirm Identity Match
+                                      </button>
+                                  ) : (
+                                      <div className="mt-4 p-2 bg-emerald-50 text-emerald-700 text-center rounded border border-emerald-100 text-xs font-bold flex items-center justify-center gap-2">
+                                          <CheckCircle size={14} /> Match Confirmed by Officer
+                                      </div>
+                                  )}
+                              </div>
+
+                              {/* Details */}
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <span className="text-[10px] uppercase text-slate-400 font-bold block mb-1">Last Seen</span>
+                                  <div className="flex items-center gap-1 text-sm font-medium text-slate-800 dark:text-slate-200">
+                                     <MapPin size={12} className="text-red-500" /> {selectedProfile.lastSeen}
+                                  </div>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] uppercase text-slate-400 font-bold block mb-1">Known Crimes</span>
+                                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                                      {Array.isArray(selectedProfile.crimes) ? selectedProfile.crimes.join(', ') : selectedProfile.crimes}
+                                  </p>
+                                </div>
+                              </div>
+                          </div>
+                      )}
+
+                      {/* TAB: CRIMINAL HISTORY */}
+                      {profileTab === 'history' && (
+                          <div className="space-y-4">
+                              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                  <Gavel size={14} /> FIR & Case History
+                              </h4>
+                              
+                              {selectedProfile.caseHistory && selectedProfile.caseHistory.length > 0 ? (
+                                  <div className="relative border-l-2 border-slate-200 dark:border-slate-700 ml-2 space-y-6 pl-4 py-1">
+                                      {selectedProfile.caseHistory.map((history: any, idx: number) => (
+                                          <div key={idx} className="relative">
+                                              <div className={`absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-800 ${history.status.includes('Closed') ? 'bg-slate-400' : 'bg-red-500'}`}></div>
+                                              <div className="flex justify-between items-start">
+                                                  <div>
+                                                      <span className="text-xs font-mono font-bold text-navy-700 dark:text-blue-400 block">{history.id}</span>
+                                                      <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{history.type}</span>
+                                                  </div>
+                                                  <span className="text-[10px] text-slate-500 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{history.date}</span>
+                                              </div>
+                                              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
+                                                  <Landmark size={10} /> {history.station}
+                                              </div>
+                                              <div className="mt-1">
+                                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                                                      history.status.includes('Closed') 
+                                                        ? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' 
+                                                        : 'bg-amber-50 text-amber-700 border border-amber-100 dark:bg-amber-900/30 dark:text-amber-400'
+                                                  }`}>
+                                                      {history.status}
+                                                  </span>
+                                              </div>
+                                          </div>
+                                      ))}
+                                  </div>
+                              ) : (
+                                  <div className="p-4 bg-slate-50 dark:bg-slate-700 rounded text-center text-xs text-slate-500">
+                                      No detailed case history records linked to this ID.
+                                  </div>
+                              )}
+                              
+                              <button className="w-full mt-4 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 py-2 rounded text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+                                  Request Full Case Files (CCTNS)
+                              </button>
+                          </div>
+                      )}
+                   </div>
+                 ) : (
+                   <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-50">
+                     <User size={48} className="mb-4" />
+                     <p className="text-sm text-center">Select a match to view criminal history.</p>
+                   </div>
+                 )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
+      {/* Register Tab Content */}
       {activeTab === 'register' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in flex-1">
             <div className="lg:col-span-1 space-y-4">
@@ -1328,6 +1154,7 @@ const CriminalRegistry = () => {
         </div>
       )}
 
+      {/* Database Tab */}
       {activeTab === 'database' && (
         <div className="animate-fade-in flex-1 overflow-hidden flex flex-col">
            <div className="flex justify-between items-center mb-6">
