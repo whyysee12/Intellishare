@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { BarChart3, GitMerge, AlertTriangle, Activity, ArrowLeft } from 'lucide-react';
 import PatternDetection from './PatternDetection';
 import PredictiveAnalytics from './PredictiveAnalytics';
@@ -10,17 +10,47 @@ import { Case } from '../../types';
 
 const AnalyticsDashboard = () => {
   const { id } = useParams();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('pattern');
   const [caseData, setCaseData] = useState<Case | null>(null);
 
   useEffect(() => {
     if (id) {
       const foundCase = MOCK_CASES.find(c => c.id === id);
-      setCaseData(foundCase || null);
+      if (foundCase) {
+        setCaseData(foundCase);
+      } else if (location.state && location.state.patternData) {
+        // Construct shadow case from pattern data
+        const p = location.state.patternData;
+        const shadowCase: Case = {
+            id: p.id,
+            title: p.name,
+            description: `AI-detected pattern with ${p.confidence}% confidence. Trend direction: ${p.trend}. Automated intelligence gathering initiated.`,
+            type: p.type || 'General',
+            status: 'Under Investigation',
+            date: new Date().toISOString().split('T')[0],
+            location: {
+                lat: 28.6139,
+                lng: 77.2090,
+                address: 'Multiple Locations',
+                city: 'Detected Zone'
+            },
+            priority: p.risk === 'High' ? 'High' : 'Medium',
+            assignedOfficer: 'AI System',
+            entities: [
+                { id: 'e1', type: 'Location', value: 'Cluster Origin' },
+                { id: 'e2', type: 'Person', value: 'Unknown Suspects' }
+            ],
+            similarityScore: 0
+        };
+        setCaseData(shadowCase);
+      } else {
+        setCaseData(null);
+      }
     } else {
       setCaseData(null);
     }
-  }, [id]);
+  }, [id, location.state]);
 
   return (
     <div className="space-y-6">
@@ -30,7 +60,7 @@ const AnalyticsDashboard = () => {
               {caseData ? (
                 <>
                   <div className="flex items-center gap-2 mb-2">
-                    <Link to="/cases" className="text-slate-400 hover:text-navy-600 dark:hover:text-blue-400 transition">
+                    <Link to="/dashboard" className="text-slate-400 hover:text-navy-600 dark:hover:text-blue-400 transition">
                       <ArrowLeft size={18} />
                     </Link>
                     <span className="text-xs font-mono font-bold bg-navy-100 text-navy-800 px-2 py-0.5 rounded">
@@ -41,7 +71,7 @@ const AnalyticsDashboard = () => {
                     {caseData.title}
                   </h2>
                   <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                    Targeted intelligence report for {caseData.type} in {caseData.location.city}.
+                    Targeted intelligence report for {caseData.type}.
                   </p>
                 </>
               ) : (
@@ -106,9 +136,9 @@ const AnalyticsDashboard = () => {
 
       <div className="min-h-[500px]">
         {activeTab === 'pattern' && <PatternDetection caseData={caseData} />}
-        {activeTab === 'predictive' && <PredictiveAnalytics caseData={caseData} />}
+        {activeTab === 'predictive' && <PredictiveAnalytics />}
         {activeTab === 'link' && <LinkAnalysis caseData={caseData} />}
-        {activeTab === 'sentiment' && <SentimentAnalysis caseData={caseData} />}
+        {activeTab === 'sentiment' && <SentimentAnalysis />}
       </div>
     </div>
   );

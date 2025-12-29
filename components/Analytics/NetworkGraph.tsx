@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, RotateCw, X, Share2, FileText, MapPin, Phone, Car, User, AlertCircle } from 'lucide-react';
+import { Search, RotateCw, X, Share2, FileText, MapPin, Phone, Car, User, AlertCircle, Filter, Network } from 'lucide-react';
 import { MOCK_CASES } from '../../data/mockData';
 import { Case } from '../../types';
 
@@ -13,6 +13,9 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showProfileModal, setShowProfileModal] = useState(false);
+  
+  // New State for Global Filtering
+  const [networkFilter, setNetworkFilter] = useState('All');
 
   // --- Dynamic Data Generation ---
   const { nodes, links } = useMemo(() => {
@@ -70,17 +73,52 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
       });
 
     } else {
-      // --- GLOBAL VIEW (Latest 5 Cases) ---
-      // We will create clusters for each case
-      const recentCases = MOCK_CASES.slice(0, 5);
+      // --- GLOBAL NETWORK VIEW ---
       
-      recentCases.forEach((c, idx) => {
-        // Position cases in a circle or grid
-        // Using a pentagon layout for 5 cases
-        const caseAngle = (idx / recentCases.length) * 2 * Math.PI - (Math.PI / 2);
-        const caseRadius = 200;
-        const cx = (width / 2) + caseRadius * Math.cos(caseAngle);
-        const cy = (height / 2) + caseRadius * Math.sin(caseAngle);
+      let filteredCases = MOCK_CASES;
+      let hubName = "Global Intel";
+      let hubColor = "#3b82f6"; // Blue default
+
+      // Filter Logic for "Related FIRs"
+      if (networkFilter !== 'All') {
+        filteredCases = MOCK_CASES.filter(c => 
+          c.type.toLowerCase().includes(networkFilter.toLowerCase()) ||
+          c.title.toLowerCase().includes(networkFilter.toLowerCase())
+        );
+        hubName = `${networkFilter} Syndicate`;
+        
+        if (networkFilter.includes('Drug') || networkFilter.includes('Narcotics')) hubColor = '#ef4444'; // Red for High Risk
+        if (networkFilter.includes('Theft') || networkFilter.includes('Burglary')) hubColor = '#f97316'; // Orange
+        if (networkFilter.includes('Cyber')) hubColor = '#10b981'; // Emerald
+      } else {
+        // Limit 'All' view to recent 5 to prevent visual chaos
+        filteredCases = MOCK_CASES.slice(0, 6);
+      }
+
+      const centerX = width / 2;
+      const centerY = height / 2;
+
+      // 1. Create a "Central Hub" node representing the Network Theme
+      if (networkFilter !== 'All' && filteredCases.length > 0) {
+          generatedNodes.push({
+            id: 'HUB',
+            label: hubName,
+            type: 'Network',
+            x: centerX,
+            y: centerY,
+            color: hubColor,
+            details: `Aggregated Intelligence for ${filteredCases.length} related cases.`
+          });
+      }
+
+      // 2. Position Cases around the Hub (or in a circle if no hub)
+      const caseCount = filteredCases.length;
+      const caseRadius = networkFilter !== 'All' ? 200 : 220;
+
+      filteredCases.forEach((c, idx) => {
+        const angle = (idx / caseCount) * 2 * Math.PI - (Math.PI / 2);
+        const cx = centerX + caseRadius * Math.cos(angle);
+        const cy = centerY + caseRadius * Math.sin(angle);
 
         generatedNodes.push({
           id: c.id,
@@ -88,15 +126,28 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
           type: 'Case',
           x: cx,
           y: cy,
-          color: '#a855f7',
-          details: c.title
+          color: '#a855f7', // Purple
+          details: c.title,
+          location: c.location.city // Stored for linking
         });
 
-        // Add 2-3 entities per case for visualization to avoid clutter
-        c.entities.slice(0, 3).forEach((entity, eIdx) => {
-           // Position entities around their case
-           const entAngle = (eIdx / 3) * 2 * Math.PI + caseAngle; // Offset by case angle
-           const entDist = 80;
+        // Link to Hub if active filter
+        if (networkFilter !== 'All') {
+            generatedLinks.push({
+                source: 'HUB',
+                target: c.id,
+                style: 'solid'
+            });
+        }
+
+        // 3. Add Key Entities for each Case
+        // Show fewer entities in global view to reduce clutter
+        const keyEntities = c.entities.slice(0, 2); 
+        keyEntities.forEach((entity, eIdx) => {
+           // Position entities relative to their case node
+           // Fan them out away from center
+           const entAngle = angle + ((eIdx === 0 ? -0.3 : 0.3)); 
+           const entDist = 60;
            const ex = cx + entDist * Math.cos(entAngle);
            const ey = cy + entDist * Math.sin(entAngle);
 
@@ -118,14 +169,35 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
 
            generatedLinks.push({
              source: c.id,
-             target: nodeId
+             target: nodeId,
+             style: 'solid'
            });
         });
       });
+
+      // 4. Cross-Case Linking (Intelligence logic)
+      // Link cases if they are in the same city (Geospatial Relation)
+      if (filteredCases.length > 1) {
+          for (let i = 0; i < filteredCases.length; i++) {
+              for (let j = i + 1; j < filteredCases.length; j++) {
+                  const caseA = filteredCases[i];
+                  const caseB = filteredCases[j];
+                  
+                  if (caseA.location.city === caseB.location.city) {
+                      generatedLinks.push({
+                          source: caseA.id,
+                          target: caseB.id,
+                          style: 'dashed',
+                          label: 'Same City'
+                      });
+                  }
+              }
+          }
+      }
     }
 
     return { nodes: generatedNodes, links: generatedLinks };
-  }, [caseData]);
+  }, [caseData, networkFilter]);
 
   // Handle auto-select for demo if it matches
   useEffect(() => {
@@ -169,6 +241,7 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
         case 'Communication': case 'Phone': return <Phone size={32} className="text-slate-600" />;
         case 'Location': return <MapPin size={32} className="text-slate-600" />;
         case 'Case': return <FileText size={32} className="text-slate-600" />;
+        case 'Network': return <Network size={32} className="text-slate-600" />;
         default: return <AlertCircle size={32} className="text-slate-600" />;
     }
   };
@@ -189,6 +262,11 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
             <Share2 size={16} /> {caseData ? 'Case Network' : 'Global Network'}
           </h3>
           <div className="space-y-2.5 text-xs text-slate-300 font-medium">
+            {networkFilter !== 'All' && !caseData && (
+                <div className="flex items-center gap-3">
+                  <span className="w-3 h-3 rounded-full bg-blue-500 shadow-sm border border-white"></span> Syndicate Hub
+                </div>
+            )}
             <div className="flex items-center gap-3">
               <span className="w-3 h-3 rounded-full bg-purple-500 shadow-sm"></span> Case File
             </div>
@@ -198,28 +276,57 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
             <div className="flex items-center gap-3">
               <span className="w-3 h-3 rounded-full bg-orange-500 shadow-sm"></span> Vehicle
             </div>
-            <div className="flex items-center gap-3">
-              <span className="w-3 h-3 rounded-full bg-blue-500 shadow-sm"></span> Communication
-            </div>
+            {!caseData && (
+               <div className="mt-2 pt-2 border-t border-slate-600 text-[10px] text-slate-400">
+                  <span className="border-b border-dashed border-slate-400 mr-2 pb-0.5">---</span> Shared City Link
+               </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Search Overlay */}
-      <div className="absolute top-6 right-6 z-20 flex items-center gap-3">
-        <div className="relative group">
-          <Search className="absolute left-3 top-2.5 text-slate-400 w-4 h-4 group-focus-within:text-blue-400 transition-colors" />
-          <input 
-            type="text" 
-            placeholder="Search graph..." 
-            className="bg-[#1e293b] text-white pl-10 pr-4 py-2 rounded-lg border border-slate-600 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-64 shadow-lg placeholder-slate-500 transition-all"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+      {/* Controls Overlay (Search & Filter) */}
+      <div className="absolute top-6 right-6 z-20 flex flex-col items-end gap-3">
+        <div className="flex items-center gap-3">
+            {/* Global View Filter Dropdown */}
+            {!caseData && (
+                <div className="relative group">
+                    <div className="absolute left-3 top-2.5 text-slate-400 pointer-events-none">
+                        <Filter size={14} />
+                    </div>
+                    <select 
+                        value={networkFilter}
+                        onChange={(e) => setNetworkFilter(e.target.value)}
+                        className="bg-[#1e293b] text-white pl-9 pr-8 py-2 rounded-lg border border-slate-600 text-sm focus:outline-none focus:border-blue-500 shadow-lg appearance-none cursor-pointer hover:bg-[#283548] transition-colors"
+                    >
+                        <option value="All">All Recent Activity</option>
+                        <option value="Drug Trafficking">Narcotics Networks</option>
+                        <option value="Theft">Theft & Burglary Rings</option>
+                        <option value="Cybercrime">Cybercrime Cells</option>
+                        <option value="Fraud">Financial Fraud</option>
+                    </select>
+                </div>
+            )}
+
+            <div className="relative group">
+            <Search className="absolute left-3 top-2.5 text-slate-400 w-4 h-4 group-focus-within:text-blue-400 transition-colors" />
+            <input 
+                type="text" 
+                placeholder="Search graph..." 
+                className="bg-[#1e293b] text-white pl-10 pr-4 py-2 rounded-lg border border-slate-600 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-48 shadow-lg placeholder-slate-500 transition-all"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            </div>
+            <button className="p-2 bg-[#1e293b] border border-slate-600 rounded-lg text-slate-400 hover:text-white hover:border-slate-500 transition shadow-lg">
+            <RotateCw size={18} />
+            </button>
         </div>
-        <button className="p-2 bg-[#1e293b] border border-slate-600 rounded-lg text-slate-400 hover:text-white hover:border-slate-500 transition shadow-lg">
-          <RotateCw size={18} />
-        </button>
+        {!caseData && networkFilter !== 'All' && (
+            <div className="bg-emerald-900/80 text-emerald-200 text-[10px] px-3 py-1 rounded-full border border-emerald-700 shadow-sm backdrop-blur-sm">
+                Visualizing related <strong>{networkFilter}</strong> cases
+            </div>
+        )}
       </div>
 
       {/* SVG Graph Canvas */}
@@ -248,9 +355,9 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
               key={i}
               x1={s.x} y1={s.y}
               x2={t.x} y2={t.y}
-              stroke="#475569"
-              strokeWidth="1.5"
-              markerEnd="url(#arrow)"
+              stroke={link.style === 'dashed' ? '#94a3b8' : '#475569'}
+              strokeWidth={link.style === 'dashed' ? "1" : "1.5"}
+              strokeDasharray={link.style === 'dashed' ? "5,5" : "0"}
               className="opacity-60"
             />
           );
@@ -259,6 +366,8 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
         {/* Nodes */}
         {filteredNodes.map((node) => {
           const isSelected = selectedNode?.id === node.id;
+          const isHub = node.type === 'Network';
+          
           return (
             <g 
               key={node.id} 
@@ -268,7 +377,7 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
             >
               {isSelected && (
                 <circle 
-                  r="32" 
+                  r={isHub ? "45" : "32"} 
                   fill="none" 
                   stroke="white" 
                   strokeWidth="1.5" 
@@ -277,30 +386,24 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
                 />
               )}
               <circle 
-                r="24" 
+                r={isHub ? "35" : "24"} 
                 fill={node.color} 
                 stroke="#0f172a" 
-                strokeWidth="3"
+                strokeWidth={isHub ? "4" : "3"}
                 className="shadow-xl"
               />
+              
+              {/* Node Icon/Text */}
               {node.type === 'Case' ? (
-                 <text 
-                   dy="5" 
-                   textAnchor="middle" 
-                   fill="white" 
-                   className="text-[10px] font-bold"
-                 >FIR</text>
+                 <text dy="5" textAnchor="middle" fill="white" className="text-[10px] font-bold">FIR</text>
+              ) : node.type === 'Network' ? (
+                 <text dy="5" textAnchor="middle" fill="white" className="text-[10px] font-bold">NET</text>
               ) : (
-                 <text 
-                   dy="5" 
-                   textAnchor="middle" 
-                   fill="white" 
-                   className="text-[10px] font-bold"
-                 >{node.label.charAt(0)}</text>
+                 <text dy="5" textAnchor="middle" fill="white" className="text-[10px] font-bold">{node.label.charAt(0)}</text>
               )}
               
               <text 
-                dy="40" 
+                dy={isHub ? "55" : "40"} 
                 textAnchor="middle" 
                 fill="#e2e8f0" 
                 className="text-[10px] font-bold tracking-wide"
@@ -329,7 +432,7 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
             <div className="mt-3 inline-block">
               <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider ${
                 selectedNode.type === 'Suspect' || selectedNode.type === 'Person' ? 'bg-red-50 text-red-600 border border-red-100' :
-                selectedNode.type === 'Vehicle' ? 'bg-orange-50 text-orange-600 border border-orange-100' :
+                selectedNode.type === 'Network' ? 'bg-blue-600 text-white border border-blue-700' :
                 selectedNode.type === 'Case' ? 'bg-purple-50 text-purple-600 border border-purple-100' :
                 'bg-blue-50 text-blue-600 border border-blue-100'
               }`}>
@@ -354,6 +457,12 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
                  >
                    Open Case File
                  </button>
+               ) : selectedNode.type === 'Network' ? (
+                 <button 
+                   className="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold py-2.5 rounded-lg transition-colors shadow-md cursor-default"
+                 >
+                   System Aggregate Node
+                 </button>
                ) : (
                  <button 
                    onClick={handleViewProfile}
@@ -368,7 +477,7 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({ caseData }) => {
       )}
 
       {/* Full Profile Modal */}
-      {showProfileModal && selectedNode && selectedNode.type !== 'Case' && (
+      {showProfileModal && selectedNode && selectedNode.type !== 'Case' && selectedNode.type !== 'Network' && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in p-4">
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="relative h-24 bg-gradient-to-r from-navy-800 to-navy-600">
