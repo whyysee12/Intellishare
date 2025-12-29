@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { RefreshCw, CheckCircle, AlertTriangle, Settings, Database, Activity, Lock } from 'lucide-react';
+import { RefreshCw, CheckCircle, AlertTriangle, Settings, Database, Activity, Lock, HardDrive } from 'lucide-react';
 
 const APIIntegration = () => {
   const [syncing, setSyncing] = useState<string | null>(null);
 
   const sources = [
+    { id: 'esakya', name: 'ESAKYA Evidence Vault', status: 'Connected', lastSync: 'Real-time', type: 'Digital Forensics', isSecure: true },
     { id: 'cctns', name: 'CCTNS National DB', status: 'Connected', lastSync: '15 mins ago', type: 'Crime Records' },
     { id: 'vahan', name: 'Vahan 4.0', status: 'Connected', lastSync: '1 hour ago', type: 'Vehicle Registry' },
     { id: 'natgrid', name: 'NATGRID Bridge', status: 'Restricted', lastSync: '4 hours ago', type: 'Intel Aggregator' },
@@ -42,8 +43,8 @@ const APIIntegration = () => {
              }`}></div>
 
              <div className="flex justify-between items-start mb-4">
-                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100">
-                  <Activity size={24} className="text-navy-700" />
+                <div className={`p-2.5 rounded-lg border ${source.isSecure ? 'bg-cyan-50 border-cyan-100' : 'bg-slate-50 border-slate-100'}`}>
+                  {source.isSecure ? <HardDrive size={24} className="text-cyan-600" /> : <Activity size={24} className="text-navy-700" />}
                 </div>
                 <div className={`text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 ${
                   source.status === 'Connected' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :

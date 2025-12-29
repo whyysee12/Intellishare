@@ -13,6 +13,7 @@ import SearchModule from './components/Search/SearchModule';
 import UserProfile from './components/Profile/UserProfile';
 import CriminalRegistry from './components/Criminals/CriminalRegistry';
 import InterAgencyShare from './components/Share/InterAgencyShare';
+import IntelligenceHub from './components/Intelligence/IntelligenceHub'; // Imported
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Common/Header';
 
@@ -56,6 +57,7 @@ const App = () => {
             <Route path="/search" element={<ProtectedRoute><SearchModule /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
             <Route path="/share" element={<ProtectedRoute><InterAgencyShare /></ProtectedRoute>} />
+            <Route path="/intelligence" element={<ProtectedRoute><IntelligenceHub /></ProtectedRoute>} /> {/* New Route */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { Shield, Lock, User, Activity, AlertTriangle, Info, CheckCircle } from 'lucide-react';
+import { Shield, Lock, User, Activity, AlertTriangle, Info, CheckCircle, BrainCircuit, FileText, Layers } from 'lucide-react';
 
 const Login = () => {
   const { login } = useAuth();
@@ -100,35 +100,40 @@ const Login = () => {
         {/* LEFT SIDE DESIGN */}
         <div className="hidden lg:flex w-5/12 bg-navy-800 flex-col justify-between p-12 text-white relative overflow-hidden">
           {/* Background Image/Gradient overlay */}
-          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=1000')] bg-cover bg-center opacity-20"></div>
-          <div className="absolute inset-0 bg-gradient-to-br from-navy-900/90 to-blue-900/80"></div>
+          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=1000')] bg-cover bg-center opacity-10"></div>
+          <div className="absolute inset-0 bg-gradient-to-br from-navy-900/95 to-blue-900/90"></div>
           
           <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-12">
-              <Shield className="w-8 h-8 text-blue-400" />
+            <div className="flex items-center gap-3 mb-10">
+              <Shield className="w-8 h-8 text-emerald-400" />
               <span className="font-bold text-xl tracking-wider">INTELLISHARE</span>
             </div>
             
-            <h2 className="text-4xl font-bold leading-tight mb-6">
-              Unified Law<br/>Enforcement<br/>Intelligence
+            <h2 className="text-3xl font-bold leading-tight mb-6">
+              Case Continuity &<br/>Investigative<br/>Understanding
             </h2>
-            <p className="text-blue-100 text-sm leading-relaxed mb-8 opacity-90">
-              Secure inter-agency data sharing, AI-driven analytics, and real-time operational intelligence for Indian Law Enforcement Agencies.
+            <p className="text-blue-100 text-sm leading-relaxed mb-8 opacity-90 border-l-2 border-emerald-500 pl-4">
+              A secure intelligence layer designed to reduce information loss during officer transfers. We connect CCTNS, NCRB, and ESAKYA to provide instant context, not automated decisions.
             </p>
             
-            <div className="space-y-6 mt-12">
-               <div className="h-px w-20 bg-blue-500/50 mb-6"></div>
-               {/* Tech overlay graphics simulation */}
-               <div className="flex gap-2 opacity-50">
-                  <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
-                  <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse delay-75"></div>
-                  <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse delay-150"></div>
+            <div className="space-y-4">
+               <div className="flex gap-3 items-center text-sm">
+                  <div className="p-2 bg-white/10 rounded-lg"><Layers size={16} className="text-blue-300" /></div>
+                  <span className="text-blue-100">Unified Continuity Layer</span>
+               </div>
+               <div className="flex gap-3 items-center text-sm">
+                  <div className="p-2 bg-white/10 rounded-lg"><BrainCircuit size={16} className="text-purple-300" /></div>
+                  <span className="text-blue-100">Investigative Memory (AI)</span>
+               </div>
+               <div className="flex gap-3 items-center text-sm">
+                  <div className="p-2 bg-white/10 rounded-lg"><FileText size={16} className="text-emerald-300" /></div>
+                  <span className="text-blue-100">Read-Only Evidence View</span>
                </div>
             </div>
           </div>
 
-          <div className="relative z-10 text-[10px] text-blue-300 uppercase tracking-widest font-medium">
-            © 2024 Bureau of Police Research & Development
+          <div className="relative z-10 text-[10px] text-slate-400 uppercase tracking-widest font-medium mt-12">
+            Secure Government Gateway • Audit Logged
           </div>
         </div>
 
@@ -138,7 +143,7 @@ const Login = () => {
              
              <div className="text-center mb-8">
                <h1 className="text-2xl font-bold text-navy-900">Officer Login</h1>
-               <p className="text-slate-500 text-sm mt-2">Access restricted to authorized personnel only.</p>
+               <p className="text-slate-500 text-sm mt-2">Access restricted to authorized investigative personnel.</p>
              </div>
 
              {errors.general && (
@@ -255,7 +260,7 @@ const Login = () => {
                      <Activity className="animate-spin w-5 h-5" /> Authenticating...
                    </>
                  ) : (
-                   'Access Portal'
+                   'Access Continuity Portal'
                  )}
                </button>
              </form>

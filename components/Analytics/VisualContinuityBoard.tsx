@@ -17,7 +17,11 @@ import {
   ZoomOut,
   Maximize,
   BrainCircuit,
-  MessageSquare
+  MessageSquare,
+  Database,
+  Eye,
+  EyeOff,
+  HardDrive
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { Case } from '../../types';
@@ -36,13 +40,14 @@ const CONTINUITY_EVENTS = [
 ];
 
 const PINBOARD_NODES = [
-  { id: 'n1', type: 'suspect', label: 'Raj Malhotra', status: 'Wanted', x: 400, y: 300, img: 'https://ui-avatars.com/api/?name=Raj+Malhotra&background=ef4444&color=fff' },
-  { id: 'n2', type: 'evidence', label: 'CCTV Footage', x: 150, y: 100, icon: FileText },
-  { id: 'n3', type: 'vehicle', label: 'DL-8C-AB-1234', x: 250, y: 250, icon: Car },
-  { id: 'n4', type: 'location', label: 'Sector 4 Market', x: 100, y: 400, icon: MapPin },
-  { id: 'n5', type: 'phone', label: '+91-9899...', x: 600, y: 350, icon: Phone },
-  { id: 'n6', type: 'associate', label: 'Unknown Helper', status: 'Suspected', x: 650, y: 150, icon: HelpCircle },
-  { id: 'n7', type: 'location', label: 'Hideout B', x: 500, y: 500, icon: MapPin },
+  { id: 'n1', type: 'suspect', label: 'Raj Malhotra', status: 'Wanted', x: 400, y: 300, img: 'https://ui-avatars.com/api/?name=Raj+Malhotra&background=ef4444&color=fff', source: 'CCTNS' },
+  { id: 'n2', type: 'evidence', label: 'CCTV Footage', x: 150, y: 100, icon: FileText, source: 'ESAKYA', isEsakya: true },
+  { id: 'n3', type: 'vehicle', label: 'DL-8C-AB-1234', x: 250, y: 250, icon: Car, source: 'Vahan' },
+  { id: 'n4', type: 'location', label: 'Sector 4 Market', x: 100, y: 400, icon: MapPin, source: 'CCTNS' },
+  { id: 'n5', type: 'phone', label: '+91-9899...', x: 600, y: 350, icon: Phone, source: 'CDR' },
+  { id: 'n6', type: 'associate', label: 'Unknown Helper', status: 'Suspected', x: 650, y: 150, icon: HelpCircle, source: 'AI-Inference', isAi: true },
+  { id: 'n7', type: 'location', label: 'Hideout B', x: 500, y: 500, icon: MapPin, source: 'Intel', isAi: true },
+  { id: 'n8', type: 'evidence', label: 'Forensic Rep', x: 300, y: 50, icon: HardDrive, source: 'ESAKYA', isEsakya: true },
 ];
 
 const PINBOARD_LINKS = [
@@ -50,14 +55,16 @@ const PINBOARD_LINKS = [
   { source: 'n3', target: 'n1', label: 'Registered Owner', style: 'solid', color: '#ef4444' }, // Red string (strong)
   { source: 'n1', target: 'n4', label: 'Last Seen', style: 'dashed', color: '#f59e0b' },
   { source: 'n1', target: 'n5', label: 'Primary Device', style: 'solid', color: '#3b82f6' },
-  { source: 'n5', target: 'n6', label: 'Frequent Calls', style: 'dashed', color: '#ef4444' }, // Red string
-  { source: 'n1', target: 'n7', label: 'Fled to?', style: 'dotted', color: '#94a3b8' },
+  { source: 'n5', target: 'n6', label: 'Frequent Calls', style: 'dashed', color: '#ef4444', isAi: true }, // Red string
+  { source: 'n1', target: 'n7', label: 'Fled to?', style: 'dotted', color: '#94a3b8', isAi: true },
+  { source: 'n8', target: 'n2', label: 'Analysis Of', style: 'solid', color: '#06b6d4', isEsakya: true },
 ];
 
 const VisualContinuityBoard: React.FC<Props> = ({ caseData }) => {
   const [selectedEvent, setSelectedEvent] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
   const [handoverMode, setHandoverMode] = useState(false);
+  const [showAiLayer, setShowAiLayer] = useState(true);
   const [aiBriefing, setAiBriefing] = useState<string | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
 
@@ -85,7 +92,7 @@ const VisualContinuityBoard: React.FC<Props> = ({ caseData }) => {
         <h3>🚨 Critical Situation Report</h3>
         <p>[1-2 sentences on current status]</p>
         
-        <h4>✅ Confirmed Facts</h4>
+        <h4>✅ Confirmed Facts (ESAKYA Verified)</h4>
         <ul>[Bullet points of solid evidence]</ul>
         
         <h4>⚠️ Knowledge Gaps & Risks</h4>
@@ -141,23 +148,53 @@ const VisualContinuityBoard: React.FC<Props> = ({ caseData }) => {
             <BrainCircuit className="text-purple-600" size={20} />
             Visual Continuity Board
           </h3>
+          
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
-          <div className="flex gap-2">
-             <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500"><ZoomOut size={18} /></button>
-             <span className="text-xs font-mono self-center text-slate-400">{Math.round(zoom * 100)}%</span>
-             <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500"><ZoomIn size={18} /></button>
-             <button onClick={() => setPan({x:0, y:0})} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 ml-1" title="Center"><Maximize size={18} /></button>
+          
+          {/* Source Attribution Badge */}
+          <div className="flex items-center gap-1.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 px-2 py-1 rounded border border-slate-200 dark:border-slate-600">
+            <Database size={10} />
+            <span>SOURCE: CCTNS 2.0</span>
+            <span className="w-1 h-1 bg-emerald-500 rounded-full mx-1"></span>
+            <span className="font-mono opacity-70">Synced: 10m ago</span>
           </div>
+
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
+
+          {/* AI Layer Toggle */}
+          <button 
+            onClick={() => setShowAiLayer(!showAiLayer)}
+            className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold transition-all border ${
+              showAiLayer 
+                ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300' 
+                : 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
+            }`}
+          >
+            {showAiLayer ? <Eye size={12} /> : <EyeOff size={12} />}
+            {showAiLayer ? 'AI Insights: ON' : 'AI Insights: OFF'}
+          </button>
+
         </div>
 
-        <div className="flex items-center gap-3">
-           <span className="text-xs font-medium text-slate-500 hidden sm:block">Officer Handover Mode:</span>
-           <button 
-             onClick={() => setHandoverMode(!handoverMode)}
-             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${handoverMode ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}
-           >
-             <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${handoverMode ? 'translate-x-6' : 'translate-x-1'}`} />
-           </button>
+        <div className="flex items-center gap-4">
+           <div className="flex gap-1 items-center bg-slate-100 dark:bg-slate-700 rounded-lg p-0.5">
+             <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} className="p-1.5 hover:bg-white dark:hover:bg-slate-600 rounded text-slate-500"><ZoomOut size={16} /></button>
+             <span className="text-xs font-mono self-center text-slate-400 w-10 text-center">{Math.round(zoom * 100)}%</span>
+             <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} className="p-1.5 hover:bg-white dark:hover:bg-slate-600 rounded text-slate-500"><ZoomIn size={16} /></button>
+             <button onClick={() => setPan({x:0, y:0})} className="p-1.5 hover:bg-white dark:hover:bg-slate-600 rounded text-slate-500 ml-1" title="Center"><Maximize size={16} /></button>
+           </div>
+
+           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
+
+           <div className="flex items-center gap-3">
+             <span className="text-xs font-medium text-slate-500 hidden sm:block">Officer Handover:</span>
+             <button 
+               onClick={() => setHandoverMode(!handoverMode)}
+               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${handoverMode ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+             >
+               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${handoverMode ? 'translate-x-6' : 'translate-x-1'}`} />
+             </button>
+           </div>
         </div>
       </div>
 
@@ -221,67 +258,89 @@ const VisualContinuityBoard: React.FC<Props> = ({ caseData }) => {
                     const s = PINBOARD_NODES.find(n => n.id === link.source);
                     const t = PINBOARD_NODES.find(n => n.id === link.target);
                     if(!s || !t) return null;
+                    
+                    // Filter based on AI Layer toggle
+                    if (link.isAi && !showAiLayer) return null;
+
                     return (
                       <g key={i}>
                         <line 
                           x1={s.x + 60} y1={s.y + 40} // Center approx
                           x2={t.x + 60} y2={t.y + 40} 
-                          stroke={link.color} 
+                          stroke={link.isAi ? "#a855f7" : link.isEsakya ? "#06b6d4" : link.color} 
                           strokeWidth={link.style === 'solid' ? 3 : 2}
-                          strokeDasharray={link.style === 'dotted' ? '4 4' : link.style === 'dashed' ? '8 8' : '0'}
+                          strokeDasharray={link.isAi ? '4 2' : link.style === 'dotted' ? '4 4' : link.style === 'dashed' ? '8 8' : '0'}
                           strokeOpacity={handoverMode ? 0.4 : 0.8}
                         />
                         {/* Label on line */}
                         <text 
                           x={(s.x + t.x + 120)/2} 
                           y={(s.y + t.y + 80)/2 - 5} 
-                          fill={link.color} 
+                          fill={link.isAi ? "#d8b4fe" : link.isEsakya ? "#22d3ee" : link.color} 
                           fontSize="12" 
                           fontWeight="bold"
                           textAnchor="middle"
                           style={{ textShadow: '0 1px 2px black' }}
                         >
-                          {link.label}
+                          {link.label} {link.isAi && '(AI)'}
                         </text>
                       </g>
                     );
                  })}
               </svg>
 
-              {PINBOARD_NODES.map((node) => (
-                <div 
-                  key={node.id}
-                  className={`absolute w-32 bg-slate-800 border-2 rounded-lg shadow-2xl p-2 flex flex-col items-center gap-2 select-none group hover:z-50 hover:scale-105 transition-transform ${
-                    handoverMode && node.type !== 'suspect' && node.type !== 'location' ? 'opacity-40 blur-[1px]' : 'opacity-100'
-                  }`}
-                  style={{ 
-                    left: node.x, 
-                    top: node.y,
-                    borderColor: node.type === 'suspect' ? '#ef4444' : node.type === 'evidence' ? '#3b82f6' : '#64748b'
-                  }}
-                >
-                   {/* Pin Visual */}
-                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-red-600 border border-white shadow-sm z-10"></div>
-                   
-                   {node.img ? (
-                     <img src={node.img} className="w-16 h-16 rounded-md object-cover border border-slate-600" alt={node.label} />
-                   ) : (
-                     <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center text-slate-300">
-                        {node.icon && <node.icon size={20} />}
+              {PINBOARD_NODES.map((node) => {
+                // Filter nodes based on AI Layer toggle
+                if (node.isAi && !showAiLayer) return null;
+
+                return (
+                  <div 
+                    key={node.id}
+                    className={`absolute w-32 bg-slate-800 border-2 rounded-lg shadow-2xl p-2 flex flex-col items-center gap-2 select-none group hover:z-50 hover:scale-105 transition-transform ${
+                      handoverMode && node.type !== 'suspect' && node.type !== 'location' ? 'opacity-40 blur-[1px]' : 'opacity-100'
+                    } ${
+                      node.isAi ? 'border-purple-500 border-dashed bg-slate-800/80' : 
+                      node.isEsakya ? 'border-cyan-500 bg-slate-800' :
+                      'border-slate-600'
+                    }`}
+                    style={{ 
+                      left: node.x, 
+                      top: node.y,
+                      borderColor: node.isAi ? '#a855f7' : node.isEsakya ? '#06b6d4' : node.type === 'suspect' ? '#ef4444' : node.type === 'evidence' ? '#3b82f6' : '#64748b'
+                    }}
+                  >
+                     {/* Pin Visual */}
+                     <div className={`absolute -top-3 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full border border-white shadow-sm z-10 ${
+                       node.isAi ? 'bg-purple-600' : 
+                       node.isEsakya ? 'bg-cyan-600' :
+                       'bg-red-600'
+                     }`}></div>
+                     
+                     {node.img ? (
+                       <img src={node.img} className="w-16 h-16 rounded-md object-cover border border-slate-600" alt={node.label} />
+                     ) : (
+                       <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center text-slate-300">
+                          {node.icon && <node.icon size={20} />}
+                       </div>
+                     )}
+                     
+                     <div className="text-center">
+                       <span className={`text-[9px] uppercase font-bold px-1.5 rounded ${
+                          node.type === 'suspect' ? 'bg-red-900 text-red-200' : 'bg-slate-700 text-slate-300'
+                       }`}>
+                         {node.type}
+                       </span>
+                       <p className="text-xs font-bold text-white mt-1 leading-tight">{node.label}</p>
+                       <div className="flex justify-center gap-1 mt-1">
+                          <span className={`text-[8px] px-1 rounded text-slate-400 border ${
+                            node.isEsakya ? 'bg-cyan-950 border-cyan-800 text-cyan-400' : 'bg-black/40 border-slate-700'
+                          }`}>{node.source}</span>
+                          {node.isAi && <span className="text-[8px] bg-purple-900/50 text-purple-300 px-1 rounded border border-purple-800">AI</span>}
+                       </div>
                      </div>
-                   )}
-                   
-                   <div className="text-center">
-                     <span className={`text-[9px] uppercase font-bold px-1.5 rounded ${
-                        node.type === 'suspect' ? 'bg-red-900 text-red-200' : 'bg-slate-700 text-slate-300'
-                     }`}>
-                       {node.type}
-                     </span>
-                     <p className="text-xs font-bold text-white mt-1 leading-tight">{node.label}</p>
-                     {node.status && <p className="text-[10px] text-amber-400 font-mono mt-0.5">{node.status}</p>}
-                   </div>
-                </div>
-              ))}
+                  </div>
+                );
+              })}
            </div>
         </div>
 

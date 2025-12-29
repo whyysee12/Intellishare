@@ -1,14 +1,17 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import NetworkGraph from './NetworkGraph';
-import { Share2, FileText, Info } from 'lucide-react';
+import { Share2, FileText, Info, MapPin, AlertCircle } from 'lucide-react';
 import { Case } from '../../types';
+import * as L from 'leaflet';
 
 interface Props {
   caseData?: Case | null;
 }
 
 const PatternDetection: React.FC<Props> = ({ caseData }) => {
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const mapInstance = useRef<L.Map | null>(null);
   
   // Generate dynamic data based on the specific case type if available
   const data = useMemo(() => {
@@ -38,6 +41,65 @@ const PatternDetection: React.FC<Props> = ({ caseData }) => {
       }
       return newItem;
     });
+  }, [caseData]);
+
+  // Initialize Leaflet Map for Geospatial Cluster
+  useEffect(() => {
+    // Only initialize if we have a container and caseData (for specific location)
+    if (mapContainer.current && caseData) {
+        if (mapInstance.current) {
+            mapInstance.current.remove();
+            mapInstance.current = null;
+        }
+
+        const { lat, lng } = caseData.location;
+        const map = L.map(mapContainer.current).setView([lat, lng], 14);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Custom Icons
+        const redIcon = L.divIcon({
+            className: 'bg-transparent',
+            html: `<div class="w-4 h-4 bg-red-600 rounded-full border-2 border-white shadow-md"></div>`
+        });
+        
+        const mainIcon = L.divIcon({
+            className: 'bg-transparent',
+            html: `<div class="relative"><div class="w-8 h-8 bg-blue-600 rounded-full border-4 border-white shadow-lg flex items-center justify-center text-white"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></div><div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-white"></div></div>`
+        });
+
+        // Add Cluster Circle
+        L.circle([lat, lng], {
+            color: '#ef4444',
+            fillColor: '#ef4444',
+            fillOpacity: 0.2,
+            radius: 800
+        }).addTo(map);
+
+        // Add Main Marker
+        L.marker([lat, lng], { icon: mainIcon }).addTo(map)
+            .bindPopup(`<div class="text-center font-bold text-navy-900">Pattern Epicenter<br/><span class="text-xs text-slate-500">${caseData.type} Cluster Origin</span></div>`)
+            .openPopup();
+
+        // Add Nearby Random Incidents (Simulated)
+        for(let i=0; i<5; i++) {
+            const rLat = lat + (Math.random() * 0.01 - 0.005);
+            const rLng = lng + (Math.random() * 0.01 - 0.005);
+            L.marker([rLat, rLng], { icon: redIcon }).addTo(map)
+             .bindPopup(`<span class="text-xs font-bold">Linked Incident #${i+1}</span>`);
+        }
+
+        mapInstance.current = map;
+    }
+
+    return () => {
+        if (mapInstance.current) {
+            mapInstance.current.remove();
+            mapInstance.current = null;
+        }
+    };
   }, [caseData]);
 
   const primaryTrend = caseData?.type || 'General Crime';
@@ -134,16 +196,51 @@ const PatternDetection: React.FC<Props> = ({ caseData }) => {
         </div>
       </div>
 
-      {/* Network Graph Section - Always show, either Case specific or Global */}
-      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
-           <h4 className="font-bold text-navy-900 dark:text-white flex items-center gap-2">
-             <Share2 size={18} /> {caseData ? `Network Analysis: ${caseData.id}` : 'Global Criminal Network Visualization'}
-           </h4>
+      {/* Map & Network Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* Geospatial Cluster Map */}
+        <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col h-[500px]">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 flex justify-between items-center">
+                <h4 className="font-bold text-navy-900 dark:text-white flex items-center gap-2">
+                    <MapPin size={18} className="text-navy-600 dark:text-blue-400" /> Geospatial Cluster
+                </h4>
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-2 py-1 rounded-full flex items-center gap-1.5">
+                    <AlertCircle size={12} className="text-red-600 dark:text-red-400 animate-pulse" />
+                    <span className="text-[10px] font-bold text-red-700 dark:text-red-400 uppercase">Hotspot Detected</span>
+                </div>
+            </div>
+            <div className="flex-1 relative">
+                {caseData ? (
+                    <>
+                        <div ref={mapContainer} className="absolute inset-0 z-0" />
+                        {/* Legend Overlay */}
+                        <div className="absolute bottom-4 left-4 bg-white/90 dark:bg-slate-800/90 p-2 rounded shadow border border-slate-200 dark:border-slate-600 text-xs z-[400]">
+                            <div className="flex items-center gap-2 mb-1"><span className="w-2 h-2 rounded-full bg-red-600"></span> Incident</div>
+                            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-400 opacity-50"></span> Predicted Zone</div>
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400">Select a case to view geospatial clusters</div>
+                )}
+            </div>
         </div>
-        <div className="p-1">
-           <NetworkGraph caseData={caseData} />
+
+        {/* Network Graph Section */}
+        <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden h-[500px] flex flex-col">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
+                <h4 className="font-bold text-navy-900 dark:text-white flex items-center gap-2">
+                    <Share2 size={18} /> {caseData ? `Network Analysis: ${caseData.id}` : 'Global Criminal Network Visualization'}
+                </h4>
+            </div>
+            <div className="flex-1 overflow-hidden relative">
+                {/* Adjusting inner height style via prop or wrapper if NetworkGraph supports it, forcing fit */}
+                <div className="absolute inset-0">
+                    <NetworkGraph caseData={caseData} />
+                </div>
+            </div>
         </div>
+
       </div>
     </div>
   );
