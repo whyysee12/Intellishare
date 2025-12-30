@@ -1,128 +1,134 @@
-# IntelliShare – Backend System Architecture (Prototype)
+# IntelliShare – Big Data Intelligence Platform Architecture (Design)
 
 **Classification:** OFFICIAL - PROTOTYPE DESIGN  
 **Date:** 2024-05-21  
-**Version:** 1.0.0  
+**Version:** 2.0.0 (Expanded Scope)  
 **Architect:** Senior Systems Lead  
 
 ## 1. Executive Summary
-This document outlines the backend architecture for "IntelliShare," a continuity intelligence layer designed for Indian Law Enforcement Agencies (LEAs). The system addresses the critical operational gap of **Investigative Continuity**—preventing information loss when Investigating Officers (IOs) are transferred or when cases are handed over.
+This document outlines the backend architecture for "IntelliShare," a Big Data intelligence platform designed for Law Enforcement Agencies (LEAs). The system addresses the challenges of **Data Ingestion, Indexing, Analytics, and Inter-Agency Sharing**.
 
-**Core Philosophy:** The system is a **Read-Only Intelligence Overlay**. It does not replace CCTNS (Crime and Criminal Tracking Network & Systems) or ESAKYA (e-Evidence); it aggregates metadata from these systems to provide an instant, summarized operational picture.
+**Core Philosophy:** The platform acts as a unified intelligence layer. It aggregates heterogeneous data from isolated silos (CCTNS, ESAKYA, Open Source) into a searchable index, enriched by assistive AI to highlight correlations without replacing human decision-making.
 
 ---
 
-## 2. Backend Service List (Microservices Architecture - Simulated)
+## 2. System Architecture Components (Conceptual)
 
-| Service Name | Responsibility | Data Ownership |
+The architecture follows a modular Event-Driven Design using a Pub/Sub model for high throughput data processing.
+
+| Component | Technology (Conceptual) | Role |
 | :--- | :--- | :--- |
-| **Case Continuity Svc** | Manages case metadata, timeline reconstruction, and officer assignment history. | Case Metadata, Handover Logs, Timeline Events. |
-| **Identity & Access (IAM)** | Handles RBAC (Role-Based Access Control) for Officers, Analysts, and Supervisors. | User Profiles, Session Tokens, Agency Mapping. |
-| **Evidence Metadata Svc** | Interfacing layer for ESAKYA. Fetches file attributes without downloading raw binaries. | Reference Links, Chain-of-Custody Hashes, File Types. |
-| **Intel Briefing Svc (AI)** | Orchestrates LLM calls to generate summaries and detect patterns. | No persistent data (Stateless processing). |
-| **Audit Ledger Svc** | Ensures non-repudiation. Logs every view, search, and edit with cryptographic checksums. | Immutable Audit Trail. |
+| **Ingestion Gateway** | Apache Kafka | Handles high-velocity incoming data streams from diverse sources. |
+| **Data Lake & Index** | Elasticsearch / Vector DB | Stores structured metadata and unstructured text/vectors for rapid retrieval. |
+| **Enrichment Engine** | Python (NLP/Vision) | Processes raw data to extract entities and detect patterns (Assistive AI). |
+| **Correlation Service** | Stream Processing | Links isolated events across different datasets in near real-time. |
+| **Governance Layer** | IAM / ACL Policies | Manages Role-Based Access Control (RBAC) and Inter-Agency permissioning. |
 
 ---
 
-## 3. Core Data Models (JSON Schema)
+## 3. Heterogeneous Data Ingestion Pipeline
 
-### A. Case Record
+To handle the variety of law enforcement data, the system utilizes topic-based ingestion. Raw data is normalized before indexing.
+
+### A. Ingestion Sources & Topics
+1.  **Police Databases (CCTNS/FIRs):**
+    *   **Topic:** `ingest.firs.raw`
+    *   **Data:** Structured XML/JSON containing First Information Reports, charge sheets, and arrest memos.
+2.  **Digital Evidence Metadata (ESAKYA):**
+    *   **Topic:** `ingest.media.meta`
+    *   **Data:** Metadata from CCTV footage, call recordings (CDR), and forensic reports. *Note: Binary files remain in secure vaults; only metadata/hashes are ingested.*
+3.  **Emergency Response Logs (CAD):**
+    *   **Topic:** `ingest.logs.emergency`
+    *   **Data:** Timestamped dispatch logs, distress calls, and patrol unit location pings.
+4.  **Open Source Intelligence (OSINT):**
+    *   **Topic:** `ingest.osint.social`
+    *   **Data:** Publicly available social media signals, news tickers, and web scrapings related to public safety threats.
+
+---
+
+## 4. AI/ML Enrichment Layer (Assistive Intelligence)
+
+The Enrichment Engine consumes data from the ingestion topics to add value before storage. This layer is **assistive**, providing context rather than automated decisions.
+
+### Capabilities
+*   **Entity Extraction (NER):** Automatically identifies and tags entities (Person Names, Locations, Vehicle Numbers, Organizations) within unstructured narrative text (e.g., FIR descriptions).
+*   **Topic Detection:** Classifies incidents into categories (e.g., "Narcotics," "Cyber-Fraud," "Civil Unrest") based on keyword clusters and semantic analysis.
+*   **Link Analysis:**
+    *   Builds a knowledge graph connecting entities.
+    *   *Example:* Identifying that 'Suspect A' in an FIR shares a 'Phone Number' found in an OSINT social media profile.
+*   **Vector Embedding:** Converts case descriptions and images into vector embeddings to enable semantic search (finding cases with similar *meanings*, not just matching keywords).
+
+---
+
+## 5. Cross-Source Correlation & Alerting
+
+This module detects patterns that emerge only when combining data from multiple sources.
+
+### A. Correlation Logic
+The system uses common identifiers (Entity IDs, Geolocation, Time Windows) to link disparate datasets:
+*   **Scenario:** An "Emergency Call" (Source A) reports a riot at a location. Simultaneously, "Social Media" (Source B) spikes with keywords about a protest at the same coordinates.
+*   **System Action:** The Correlation Service links these events, creating a unified "Incident Object" for the dashboard.
+
+### B. Alerting Mechanisms (Near Real-Time)
+Alerts are generated based on pre-defined rules and statistical thresholds running against the indexed data.
+*   **Threshold Alerts:** Triggered when specific crime types in a geofence exceed a baseline average (e.g., "Spike in vehicle thefts in Sector 4").
+*   **Pattern Alerts:** Triggered by specific entity combinations (e.g., "A 'Wanted' vehicle plate detected by ANPR near a sensitive high-security zone").
+*   **Implementation:** These alerts are pushed to the frontend notification service via WebSockets.
+
+---
+
+## 6. Security, Governance & Inter-Agency Sharing
+
+Given the sensitivity of data, security is architected at the granular object level.
+
+### A. Role-Based Access Control (RBAC)
+*   **Default Deny:** Users have zero access by default.
+*   **Roles:**
+    *   `Officer`: Read/Write access to own station's cases.
+    *   `Analyst`: Read-only access to aggregated data for authorized regions.
+    *   `Admin`: System configuration (cannot view sensitive case details).
+
+### B. Inter-Agency Permissioning
+*   Data is siloed by Agency ID (e.g., `agency_id: DEL_POLICE`).
+*   **Explicit Sharing:** Sharing requires an explicit "Handshake."
+    *   *Workflow:* Agency A requests access to Case X -> Agency B approves -> Access Token granted for Case X only.
+*   **Temporary Grants:** Shared access can be time-bound (e.g., "Grant access for 48 hours").
+
+### C. Immutable Audit Logging
+*   **Scope:** Every search query, record view, export, and login is logged.
+*   **Integrity:** Audit logs are structurally chained (cryptographically linked) to prevent tampering.
+*   **Accountability:** User actions are tied to immutable Badge IDs, ensuring non-repudiation.
+
+---
+
+## 7. Data Models (Simplified Schema)
+
+### Case Record (Enriched)
 ```json
 {
   "caseId": "FIR-2024-DL-0992",
-  "status": "Active",
-  "priority": "High",
-  "assignedOfficerId": "OFF-8821",
-  "jurisdiction": "New Delhi - Central",
-  "transferHistory": [
-    { "fromOfficer": "OFF-1102", "toOfficer": "OFF-8821", "date": "2024-03-10", "reason": "Transfer Order" }
+  "sourceSystem": "CCTNS",
+  "narrative": "...",
+  "extractedEntities": [
+    { "type": "PERSON", "value": "Raj Malhotra", "confidence": 0.98 },
+    { "type": "VEHICLE", "value": "DL-8C-1234", "confidence": 0.95 }
   ],
-  "continuityScore": 85
+  "aiTags": ["Narcotics", "Cross-Border"],
+  "correlationId": "CORR-7721" // Links to other events
 }
 ```
 
-### B. Evidence Metadata (ESAKYA Reference)
+### Alert Object
 ```json
 {
-  "evidenceId": "EVD-9921",
-  "caseRef": "FIR-2024-DL-0992",
-  "type": "CCTV_Video",
-  "esakyaReferenceUrl": "s3://esakya-secure-vault/dl/2024/evd-9921.mp4",
-  "chainOfCustodyHash": "a1b2c3d4e5f6...", 
-  "integrityStatus": "Verified"
+  "alertId": "ALT-1002",
+  "type": "ANOMALY_DETECTED",
+  "severity": "HIGH",
+  "trigger": "Geospatial spike in 'Theft' reports > 200% of norm",
+  "timestamp": "2024-05-21T14:30:00Z",
+  "relatedEntities": ["Sector-18", "Noida"]
 }
 ```
-
-### C. Audit Log (Immutable)
-```json
-{
-  "logId": "LOG-1000234",
-  "timestamp": "2024-05-21T10:00:00Z",
-  "actorId": "OFF-8821",
-  "action": "CASE_VIEW",
-  "targetResource": "FIR-2024-DL-0992",
-  "prevHash": "f9e8d7...",
-  "currentHash": "1a2b3c..." 
-}
-```
-
----
-
-## 4. REST API Contracts
-
-### Service: Continuity Service
-*   **Endpoint:** `GET /api/cases/:id/continuity`
-    *   **Purpose:** Retrieves the full timeline and handover context for a specific case.
-    *   **Response:** JSON object containing the timeline array and current officer notes.
-
-*   **Endpoint:** `POST /api/cases/:id/handover`
-    *   **Request:** `{ "targetOfficerId": "OFF-9999", "handoverNotes": "..." }`
-    *   **Purpose:** Executes the transfer of responsibility. Triggers an Audit Log event.
-
-### Service: Intel Briefing Service (AI)
-*   **Endpoint:** `POST /api/ai/briefing`
-    *   **Request:** `{ "caseId": "FIR-..." }`
-    *   **Response:** `{ "summary": "...", "risks": "...", "pendingActions": [...] }`
-    *   **Purpose:** Generates the "10-Minute Briefing" for the new officer.
-
----
-
-## 5. ESAKYA Integration (Conceptual Pipeline)
-
-1.  **Ingestion:** The system does **not** upload files directly.
-2.  **Indexing:** It accepts a "Manifest" from the ESAKYA API containing:
-    *   File Name & Size
-    *   Custodian Name
-    *   SHA-256 Hash
-3.  **Visualization:**
-    *   The UI displays a "Digital Locker" view.
-    *   When an officer clicks "View," the system requests a **Time-Limited Signed URL** from ESAKYA.
-    *   **Security:** This ensures evidence never permanently resides on the continuity server, maintaining the legal chain of custody.
-
----
-
-## 6. Audit & Accountability Model
-
-**Requirement:** Police systems requires strict oversight to prevent misuse (e.g., unauthorized lookup of VIP cases).
-
-**Implementation:**
-1.  **Zero-Exemption Logging:** Every API call (Read or Write) is logged.
-2.  **Chained Hashing:** Each log entry contains a hash of the previous entry.
-    *   *Effect:* If a database administrator tries to delete a log entry from the middle, the chain breaks, alerting the integrity monitor.
-3.  **Supervisor View:** High-ranking officers (ACP/DCP level) have a specific dashboard to view "Access Anomalies" (e.g., an officer accessing 50 cases in 1 minute).
-
----
-
-## 7. Demo Workflow (End-to-End)
-
-1.  **Scenario:** Officer Rajesh is transferred. Officer Vikram takes over Case #FIR-2024-1044 (Narcotics Ring).
-2.  **Login:** Officer Vikram logs in using his unique Badge ID.
-3.  **Continuity Dashboard:** He sees "New Assignments."
-4.  **AI Briefing:** He clicks "Generate Handover Brief."
-    *   *System Action:* Aggregates 50 pages of PDFs and timeline events into a 10-point bulleted list.
-5.  **Evidence Check:** He verifies the chain of custody for the seized laptop via the ESAKYA integration tab.
-6.  **Action:** He adds a note: "Surveillance Approved," which is time-stamped and appended to the immutable timeline.
-7.  **Audit:** The system records `ACTION: NOTE_ADD, ACTOR: VIKRAM, HASH: 7x8y9z`.
 
 ---
 *End of Design Document*
