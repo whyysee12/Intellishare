@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { 
@@ -11,7 +12,9 @@ import {
   ShieldAlert,
   Users,
   UserX,
-  BrainCircuit
+  BrainCircuit,
+  Radio,
+  ScanFace
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -27,10 +30,12 @@ const Sidebar = () => {
 
   const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/intelligence', icon: BrainCircuit, label: 'Continuity Hub' }, // Renamed from Intelligence Hub
+    { to: '/intelligence', icon: BrainCircuit, label: 'Continuity Hub' },
+    { to: '/osint-scanner', icon: Radio, label: 'Live OSINT Scanner' },
+    { to: '/visual-intel', icon: ScanFace, label: 'Visual Intelligence' }, // New Item
     { to: '/search', icon: Search, label: 'Search & Context' },
     { to: '/cases', icon: FileText, label: 'Case Management' },
-    { to: '/analytics', icon: BarChart3, label: 'Case Analytics' }, // Moved down
+    { to: '/analytics', icon: BarChart3, label: 'Case Analytics' },
     { to: '/criminals', icon: UserX, label: 'Criminal Registry' },
     { to: '/ingest', icon: UploadCloud, label: 'Data Ingestion' },
     { to: '/share', icon: Share2, label: 'Inter-Agency' },

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -13,7 +14,9 @@ import SearchModule from './components/Search/SearchModule';
 import UserProfile from './components/Profile/UserProfile';
 import CriminalRegistry from './components/Criminals/CriminalRegistry';
 import InterAgencyShare from './components/Share/InterAgencyShare';
-import IntelligenceHub from './components/Intelligence/IntelligenceHub'; // Imported
+import IntelligenceHub from './components/Intelligence/IntelligenceHub'; 
+import SocialScraper from './components/Intelligence/SocialScraper'; 
+import VisualIntelligence from './components/Intelligence/VisualIntelligence'; // New Import
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Common/Header';
 
@@ -57,7 +60,9 @@ const App = () => {
             <Route path="/search" element={<ProtectedRoute><SearchModule /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
             <Route path="/share" element={<ProtectedRoute><InterAgencyShare /></ProtectedRoute>} />
-            <Route path="/intelligence" element={<ProtectedRoute><IntelligenceHub /></ProtectedRoute>} /> {/* New Route */}
+            <Route path="/intelligence" element={<ProtectedRoute><IntelligenceHub /></ProtectedRoute>} />
+            <Route path="/osint-scanner" element={<ProtectedRoute><SocialScraper /></ProtectedRoute>} />
+            <Route path="/visual-intel" element={<ProtectedRoute><VisualIntelligence /></ProtectedRoute>} /> {/* New Route */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>
