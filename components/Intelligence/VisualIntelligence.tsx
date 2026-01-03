@@ -1,6 +1,5 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import * as faceapi from 'face-api.js';
 import { 
   ScanFace, 
   Upload, 
@@ -13,6 +12,9 @@ import {
   UserX,
   Target
 } from 'lucide-react';
+
+// Access faceapi from global scope injected via script tag in index.html
+const faceapi = (window as any).faceapi;
 
 // --- Fallback Data for Demo Reliability ---
 const MOCK_WATCHLIST_FALLBACK = [
@@ -58,6 +60,10 @@ const VisualIntelligence = () => {
   // Load FaceAPI Models
   useEffect(() => {
     const loadModels = async () => {
+      if (!faceapi) {
+        console.error("FaceAPI not loaded in window");
+        return;
+      }
       try {
         const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
         await Promise.all([
@@ -76,6 +82,7 @@ const VisualIntelligence = () => {
 
   const fetchWatchlist = async () => {
     try {
+      // Attempt to fetch from backend, but fallback immediately if not available (Vercel deployment)
       const res = await fetch('http://localhost:5000/api/visual/watchlist');
       if (res.ok) {
         setWatchlist(await res.json());
@@ -104,8 +111,6 @@ const VisualIntelligence = () => {
 
     try {
       // 1. Client-Side Detection (Actual Vision Processing)
-      // Note: In some environments faceapi might fail if CORS is an issue with the image source
-      // We wrap this carefully.
       let currentDetections: any[] = [];
       try {
           currentDetections = await faceapi.detectAllFaces(imageRef.current).withFaceLandmarks();
@@ -186,7 +191,7 @@ const VisualIntelligence = () => {
   const drawResults = (detections: any[], identities: any[]) => {
     const img = imageRef.current;
     const canvas = canvasRef.current;
-    if (!img || !canvas) return;
+    if (!img || !canvas || !faceapi) return;
 
     const displaySize = { width: img.width, height: img.height };
     faceapi.matchDimensions(canvas, displaySize);

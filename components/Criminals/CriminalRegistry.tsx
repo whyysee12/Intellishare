@@ -1,6 +1,6 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
-import * as faceapi from 'face-api.js';
 import { supabase } from '../../lib/supabaseClient';
 import { 
   UserPlus, 
@@ -38,6 +38,8 @@ import {
   Gavel,
   Landmark
 } from 'lucide-react';
+
+const faceapi = (window as any).faceapi;
 
 const CriminalRegistry = () => {
   const [activeTab, setActiveTab] = useState<'register' | 'analyze' | 'database'>('analyze');
@@ -102,6 +104,10 @@ const CriminalRegistry = () => {
   // --- Initialize Models & Fetch Data ---
   useEffect(() => {
     const loadModels = async () => {
+      if (!faceapi) {
+        console.error("FaceAPI not found on window");
+        return;
+      }
       try {
         const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
         await Promise.all([
@@ -420,7 +426,7 @@ const CriminalRegistry = () => {
         ctx.drawImage(video, 0, 0);
         
         let faceCount = 0;
-        if (modelsLoaded) {
+        if (modelsLoaded && faceapi) {
             try {
                 const detections = await faceapi.detectAllFaces(canvas as any); 
                 faceCount = detections.length;
@@ -457,7 +463,7 @@ const CriminalRegistry = () => {
   };
 
   const runFaceDetection = async () => {
-    if (!modelsLoaded || !analyzePhoto || !imagePreviewRef.current || !isImageLoaded) return [];
+    if (!modelsLoaded || !analyzePhoto || !imagePreviewRef.current || !isImageLoaded || !faceapi) return [];
 
     try {
       const imgEl = imagePreviewRef.current;
