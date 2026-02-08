@@ -112,12 +112,30 @@ const VisualIntelligence = () => {
     try {
       // 1. Client-Side Detection (Actual Vision Processing)
       let currentDetections: any[] = [];
+      let usingMockDetection = false;
+
       try {
-          currentDetections = await faceapi.detectAllFaces(imageRef.current).withFaceLandmarks();
+          if (faceapi) {
+            currentDetections = await faceapi.detectAllFaces(imageRef.current).withFaceLandmarks();
+          }
+          if (!currentDetections || currentDetections.length === 0) {
+             throw new Error("No faces detected or library issue");
+          }
       } catch (faceErr) {
           console.warn("FaceAPI detection error, falling back to simulation for demo", faceErr);
           // Simulate a detection box if library fails
-          currentDetections = [{ detection: { box: { x: 100, y: 100, width: 100, height: 100 } } }];
+          usingMockDetection = true;
+          // Create a mock box in the center for demo
+          if (imageRef.current) {
+            const w = imageRef.current.width;
+            const h = imageRef.current.height;
+            currentDetections = [{ 
+                mock: true,
+                box: { x: w * 0.3, y: h * 0.2, width: w * 0.4, height: h * 0.4 } 
+            }];
+          } else {
+             currentDetections = [];
+          }
       }
       setDetections(currentDetections);
 
